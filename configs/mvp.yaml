@@ -1,0 +1,143 @@
+# GoldMine Watch — MVP Configuration
+# All pipeline parameters in one place. Copy and modify for each experiment.
+
+project:
+  name: "goldmine-watch-mvp"
+  version: "0.1.0"
+
+geospatial:
+  # Pipeline-wide master CRS — RGFG95 (French Guiana)
+  target_crs: "EPSG:2972"
+  # Pilot area bounding box in target CRS [min_x, min_y, max_x, max_y]
+  # Example: area around Saint-Laurent-du-Maroni
+  pilot_bbox: [null, null, null, null]
+  # Patch size in pixels (must match model input)
+  patch_size: 256
+  # Spatial resolution in meters per pixel
+  resolution: 10
+
+data:
+  # Primary and fallback STAC endpoints
+  stac_primary: "https://planetarycomputer.microsoft.com/api/stac/v1"
+  stac_fallback: "https://catalogue.dataspace.copernicus.eu/stac"
+  # Sentinel-2 collection
+  collection: "sentinel-2-l2a"
+  # Time window for composite generation (ISO 8601 duration)
+  composite_window: "P3M"
+  # Maximum allowed cloud cover per scene (0-100)
+  max_cloud_cover: 20
+  # Bands to retrieve and stack
+  bands: ["B02", "B03", "B04", "B08", "B11", "B12"]
+  # Spectral indices to compute after band stacking
+  indices: ["NDVI", "NDWI", "BSI"]
+  # Cloud masking method
+  cloud_mask:
+    method: "SCL"
+    # SCL classes to mask as invalid: cloud, cloud shadow, no data
+    invalid_classes: [0, 3, 8, 9]
+  # Compositing aggregation
+  compositing:
+    aggregator: "median"
+    # Use Dask for out-of-core processing
+    use_dask: true
+    # Chunk size for Dask arrays [y, x]
+    chunks: [2048, 2048]
+  # Resampling method for imagery (bilinear) and masks (nearest)
+  resampling:
+    imagery: "bilinear"
+    masks: "nearest"
+
+labels:
+  # Path to vector label file (GeoPackage, GeoJSON, Shapefile)
+  source_path: "data/raw/mining_surfaces.gpkg"
+  # Optional: filter labels by date range
+  date_range:
+    start: null
+    end: null
+  # Minimum valid area in square meters
+  min_area_m2: 100
+
+dataset:
+  # Train / validation / test split ratios
+  split_ratios: [0.70, 0.15, 0.15]
+  # Random seed for reproducible splits
+  random_seed: 42
+  # Minimum fraction of valid (non-cloud, non-nodata) pixels per patch
+  min_valid_fraction: 0.8
+  # Reject patches with cloud fraction above this threshold
+  max_cloud_fraction: 0.2
+
+model:
+  # Architecture
+  architecture: "unet"
+  encoder: "resnet34"
+  encoder_weights: "imagenet"
+  # Number of input channels = len(bands) + len(indices)
+  in_channels: 9
+  # Binary segmentation: background + mining
+  classes: 1
+  # Activation for output layer
+  activation: "sigmoid"
+
+training:
+  # Hardware
+  device: "cuda"
+  # Hyperparameters
+  batch_size: 16
+  num_workers: 4
+  learning_rate: 0.001
+  epochs: 50
+  # Early stopping
+  early_stopping:
+    enabled: true
+    patience: 10
+    metric: "val_iou"
+    mode: "max"
+  # Loss function
+  loss: "bce_with_logits"
+  # Optimizer
+  optimizer: "adam"
+  # Checkpointing
+  checkpoint_dir: "models"
+  save_best_only: true
+  # Augmentation
+  augmentation:
+    enabled: true
+    horizontal_flip: true
+    vertical_flip: true
+    random_rotate90: true
+    random_brightness_contrast: true
+
+inference:
+  # Sliding window parameters
+  tile_size: 256
+  overlap: 64
+  # Blending method for overlapping regions: "average" or "gaussian"
+  blend_method: "average"
+  # Probability threshold for binary mask
+  threshold: 0.5
+  # Minimum connected component area in pixels
+  min_area_pixels: 10
+
+export:
+  # Output directory
+  output_dir: "outputs"
+  # Raster format
+  raster_format: "GTiff"
+  # Vector format
+  vector_format: "GPKG"
+  # Include these attributes in vector output
+  attributes:
+    - detection_id
+    - confidence
+    - area_m2
+    - area_ha
+    - source_image_date
+    - model_version
+
+paths:
+  data_raw: "data/raw"
+  data_processed: "data/processed"
+  data_splits: "data/splits"
+  models: "models"
+  outputs: "outputs"
