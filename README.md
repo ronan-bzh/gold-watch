@@ -15,7 +15,17 @@ AI-assisted geospatial detection of potential gold mining surfaces in French Gui
    # Edit configs/experiment_01.yaml with your pilot area and parameters
    ```
 
-3. **Run the full pipeline:**
+3. **Download Sentinel-2 data from Copernicus Data Space:**
+   ```bash
+   export COPERNICUS_CLIENT_ID="your-client-id"
+   export COPERNICUS_CLIENT_SECRET="your-client-secret"
+   python scripts/demo_feature0_download.py \
+     --bbox "-54.1,5.3,-53.9,5.5" \
+     --date "2024-01-01/2024-01-31" \
+     --output data/raw/sentinel2_scene.tif
+   ```
+
+4. **Run the full pipeline:**
    ```bash
    make data
    make train
@@ -24,7 +34,7 @@ AI-assisted geospatial detection of potential gold mining surfaces in French Gui
    make export
    ```
 
-4. **Run tests:**
+5. **Run tests:**
    ```bash
    make test
    ```
@@ -58,6 +68,7 @@ All pipeline parameters are centralized in `configs/mvp.yaml`. Copy and modify t
 | Stage | Command | Description |
 |---|---|---|
 | Setup | `make setup` | Install dependencies and pre-commit hooks |
+| Download | `python scripts/demo_feature0_download.py ...` | Download Sentinel-2 scenes from Copernicus Data Space |
 | Data | `make data` | Ingest labels, retrieve imagery, generate patches |
 | Train | `make train` | Train the segmentation model |
 | Evaluate | `make evaluate` | Compute metrics on the test set |
