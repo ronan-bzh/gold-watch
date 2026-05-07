@@ -2,12 +2,17 @@
 
 import logging
 from pathlib import Path
+from typing import Literal, overload
 
 import numpy as np
 import rasterio
 from rasterio.windows import Window
 
-from goldmine_watch.data.cloud_mask import compute_valid_fraction, create_cloud_mask, load_scl_band
+from goldmine_watch.data.cloud_mask import (
+    compute_valid_fraction,
+    create_cloud_mask,
+    load_scl_band,
+)
 from goldmine_watch.data.ingest import burn_mask, load_labels
 
 logger = logging.getLogger(__name__)
@@ -48,18 +53,60 @@ def make_patch(
     return image_patch, mask_patch
 
 
+@overload
 def generate_sliding_window_patches(
     image_path: str | Path,
     labels_path: str | Path,
     patch_size: int = 256,
     stride: int | None = None,
-    max_patches: int = 50,
+    max_patches: int = 500,
     output_dir: str | Path | None = None,
     cloud_mask_path: str | Path | None = None,
-    min_valid_fraction: float = 0.0,
     invalid_classes: list[int] | None = None,
-) -> list[tuple[np.ndarray, np.ndarray]]:
+    min_valid_fraction: float = 0.8,
+    max_cloud_fraction: float = 0.2,
+    cloud_mask: np.ndarray | None = None,
+    *,
+    return_stats: Literal[False] = False,
+) -> list[tuple[np.ndarray, np.ndarray]]: ...
+
+
+@overload
+def generate_sliding_window_patches(
+    image_path: str | Path,
+    labels_path: str | Path,
+    patch_size: int = 256,
+    stride: int | None = None,
+    max_patches: int = 500,
+    output_dir: str | Path | None = None,
+    cloud_mask_path: str | Path | None = None,
+    invalid_classes: list[int] | None = None,
+    min_valid_fraction: float = 0.8,
+    max_cloud_fraction: float = 0.2,
+    cloud_mask: np.ndarray | None = None,
+    *,
+    return_stats: Literal[True],
+) -> dict[str, object]: ...
+
+
+def generate_sliding_window_patches(
+    image_path: str | Path,
+    labels_path: str | Path,
+    patch_size: int = 256,
+    stride: int | None = None,
+    max_patches: int = 500,
+    output_dir: str | Path | None = None,
+    cloud_mask_path: str | Path | None = None,
+    invalid_classes: list[int] | None = None,
+    min_valid_fraction: float = 0.8,
+    max_cloud_fraction: float = 0.2,
+    cloud_mask: np.ndarray | None = None,
+    *,
+    return_stats: bool = False,
+) -> list[tuple[np.ndarray, np.ndarray]] | dict[str, object]:
     """Generate patches using a sliding window over the image.
+
+    Rejects patches that are too cloudy or have too few valid pixels.
 
     Args:
         image_path: Path to the source image GeoTIFF.
@@ -69,14 +116,23 @@ def generate_sliding_window_patches(
         max_patches: Maximum number of patches to generate.
         output_dir: If provided, save each patch as .npy files to this directory.
         cloud_mask_path: Optional path to a separate SCL GeoTIFF. If provided,
-            patches with valid fraction below ``min_valid_fraction`` are skipped.
-        min_valid_fraction: Minimum fraction of valid (non-cloud) pixels required
-            for a patch to be kept. Defaults to 0.0 (no filtering).
+            the SCL band is loaded and used for cloud filtering.
         invalid_classes: SCL classes to treat as invalid. Defaults to
             [0, 3, 8, 9] when *None*.
+        min_valid_fraction: Minimum fraction of valid (non-cloud) pixels
+            required for a patch to be kept.
+        max_cloud_fraction: Maximum allowed cloud fraction. Patches with
+            cloud fraction above this are skipped.
+        cloud_mask: Optional pre-computed binary cloud mask of shape
+            (height, width) where 1 = valid pixel and 0 = cloud/invalid.
+            If provided alongside ``cloud_mask_path``, this takes precedence.
+        return_stats: If True, return a dict with patches and statistics
+            instead of just the list of patches.
 
     Returns:
-        List of (image_patch, mask_patch) tuples.
+        List of (image_patch, mask_patch) tuples, or a dict with keys:
+        ``patches``, ``rejected``, and ``generated`` when *return_stats* is
+        True.
     """
     image_path = Path(image_path)
     labels_path = Path(labels_path)
@@ -90,9 +146,8 @@ def generate_sliding_window_patches(
         width = src.width
         mask = burn_mask(gdf, image_path)
 
-    # Load cloud mask if requested
-    cloud_mask: np.ndarray | None = None
-    if min_valid_fraction > 0.0 or cloud_mask_path is not None:
+    # Build cloud mask from SCL if requested and not provided directly.
+    if cloud_mask is None and (cloud_mask_path is not None or min_valid_fraction > 0.0):
         try:
             scl = load_scl_band(image_path, scl_path=cloud_mask_path)
             cloud_mask = create_cloud_mask(scl, invalid_classes=invalid_classes)
@@ -105,6 +160,12 @@ def generate_sliding_window_patches(
                 image_path,
             )
 
+    if cloud_mask is not None and cloud_mask.shape != (height, width):
+        raise ValueError(
+            f"cloud_mask shape {cloud_mask.shape} does not match "
+            f"image shape ({height}, {width})"
+        )
+
     patches: list[tuple[np.ndarray, np.ndarray]] = []
     patch_id = 0
     rejected = 0
@@ -116,11 +177,17 @@ def generate_sliding_window_patches(
 
             image_patch, mask_patch = _extract_patch(image_path, mask, x, y, patch_size)
 
-            # Check cloud coverage if we have a cloud mask
+            # Cloud filtering
             if cloud_mask is not None:
-                patch_cloud_mask = cloud_mask[y : y + patch_size, x : x + patch_size]
-                valid_frac = compute_valid_fraction(patch_cloud_mask)
+                cloud_window = cloud_mask[y : y + patch_size, x : x + patch_size]
+                valid_frac = compute_valid_fraction(cloud_window)
+
                 if valid_frac < min_valid_fraction:
+                    rejected += 1
+                    continue
+
+                cloud_frac = 1.0 - valid_frac
+                if cloud_frac > max_cloud_fraction:
                     rejected += 1
                     continue
 
@@ -138,9 +205,18 @@ def generate_sliding_window_patches(
 
     if rejected > 0:
         logger.info(
-            "Rejected %d cloudy patches (threshold %.1f%%)", rejected, min_valid_fraction * 100
+            "Rejected %d patches (min_valid=%.0f%%, max_cloud=%.0f%%)",
+            rejected,
+            min_valid_fraction * 100,
+            max_cloud_fraction * 100,
         )
 
+    if return_stats:
+        return {
+            "patches": patches,
+            "rejected": rejected,
+            "generated": len(patches),
+        }
     return patches
 
 
