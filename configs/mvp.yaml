@@ -17,9 +17,15 @@ geospatial:
   resolution: 10
 
 data:
+  # Copernicus Data Space OAuth Client (prefer env vars over hardcoded values)
+  copernicus:
+    auth_url: "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
+    stac_url: "https://catalogue.dataspace.copernicus.eu/stac"
+    # Set COPERNICUS_CLIENT_ID and COPERNICUS_CLIENT_SECRET as environment variables
+
   # Primary and fallback STAC endpoints
-  stac_primary: "https://planetarycomputer.microsoft.com/api/stac/v1"
-  stac_fallback: "https://catalogue.dataspace.copernicus.eu/stac"
+  stac_primary: "https://catalogue.dataspace.copernicus.eu/stac"
+  stac_fallback: "https://planetarycomputer.microsoft.com/api/stac/v1"
   # Sentinel-2 collection
   collection: "sentinel-2-l2a"
   # Time window for composite generation (ISO 8601 duration)

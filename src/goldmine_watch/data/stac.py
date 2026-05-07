@@ -65,7 +65,8 @@ def download_one_scene(
         bounds_latlon=bbox,
         resolution=10,
         dtype="uint16",
-        fill_value=0,
+        rescale=False,
+        epsg=32622,
     )
 
     # Write to GeoTIFF
