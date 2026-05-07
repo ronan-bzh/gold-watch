@@ -15,8 +15,7 @@ from oauthlib.oauth2 import BackendApplicationClient
 from requests_oauthlib import OAuth2Session
 
 _AUTH_URL = (
-    "https://identity.dataspace.copernicus.eu"
-    "/auth/realms/CDSE/protocol/openid-connect/token"
+    "https://identity.dataspace.copernicus.eu" "/auth/realms/CDSE/protocol/openid-connect/token"
 )
 _STAC_URL = "https://catalogue.dataspace.copernicus.eu/stac/search"
 _PROCESS_URL = "https://sh.dataspace.copernicus.eu/api/v1/process"
@@ -51,9 +50,7 @@ def get_access_token(client_id: str, client_secret: str) -> str:
             include_client_id=True,
         )
     except Exception as exc:
-        raise AuthenticationError(
-            f"Invalid Copernicus client credentials: {exc}"
-        ) from exc
+        raise AuthenticationError(f"Invalid Copernicus client credentials: {exc}") from exc
     return str(token["access_token"])
 
 
@@ -140,9 +137,9 @@ def _build_evalscript(bands: list[str]) -> str:
         f"  return {{\n"
         f"    input: [{{\n"
         f"      bands: [{band_list}],\n"
-        f"      units: \"DN\"\n"
+        f'      units: "DN"\n'
         f"    }}],\n"
-        f"    output: {{ bands: {len(bands)}, sampleType: \"UINT16\" }}\n"
+        f'    output: {{ bands: {len(bands)}, sampleType: "UINT16" }}\n'
         f"  }};\n"
         f"}}\n"
         f"function evaluatePixel(sample) {{\n"
@@ -163,9 +160,7 @@ def _bbox_size_pixels(
     min_lon, min_lat, max_lon, max_lat = bbox
     lat_mid = (min_lat + max_lat) / 2
     meters_per_deg_lat = 111_320.0
-    meters_per_deg_lon = 111_320.0 * __import__("math").cos(
-        __import__("math").radians(lat_mid)
-    )
+    meters_per_deg_lon = 111_320.0 * __import__("math").cos(__import__("math").radians(lat_mid))
     width_m = (max_lon - min_lon) * meters_per_deg_lon
     height_m = (max_lat - min_lat) * meters_per_deg_lat
     width_px = max(1, int(round(width_m / resolution_m)))
@@ -203,7 +198,11 @@ def download_scene(
         requests.HTTPError: If the Process API request fails.
     """
     if bands is None:
-        bands = ["B02", "B03", "B04", "B08", "B11", "B12"]
+        bands = ["B02", "B03", "B04", "B08", "B11", "B12", "SCL"]
+
+    # Ensure SCL is always included for cloud masking
+    if "SCL" not in bands:
+        bands = bands + ["SCL"]
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -231,9 +230,7 @@ def download_scene(
         "input": {
             "bounds": {
                 "bbox": list(bbox),
-                "properties": {
-                    "crs": "http://www.opengis.net/def/crs/EPSG/0/4326"
-                },
+                "properties": {"crs": "http://www.opengis.net/def/crs/EPSG/0/4326"},
             },
             "data": [
                 {
@@ -268,11 +265,11 @@ def download_scene(
     with open(output_path, "wb") as dst:
         dst.write(response.content)
 
-    # Verify the output
-    with rasterio.open(output_path) as src:
+    # Verify the output and tag the SCL band
+    with rasterio.open(output_path, "r+") as src:
         if src.count != len(bands):
-            raise RuntimeError(
-                f"Expected {len(bands)} bands, got {src.count}"
-            )
+            raise RuntimeError(f"Expected {len(bands)} bands, got {src.count}")
+        scl_index = bands.index("SCL") + 1
+        src.set_band_description(scl_index, "SCL")
 
     return output_path

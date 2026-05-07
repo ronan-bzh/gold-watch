@@ -33,7 +33,8 @@ data:
   # Maximum allowed cloud cover per scene (0-100)
   max_cloud_cover: 20
   # Bands to retrieve and stack
-  bands: ["B02", "B03", "B04", "B08", "B11", "B12"]
+  # Bands to retrieve and stack (SCL is always included for cloud masking)
+  bands: ["B02", "B03", "B04", "B08", "B11", "B12", "SCL"]
   # Spectral indices to compute after band stacking
   indices: ["NDVI", "NDWI", "BSI"]
   # Cloud masking method
@@ -78,8 +79,8 @@ model:
   architecture: "unet"
   encoder: "resnet34"
   encoder_weights: "imagenet"
-  # Number of input channels = len(bands) + len(indices)
-  in_channels: 9
+  # Number of input channels = len(bands) - 1 (SCL excluded) + len(indices)
+  in_channels: 10
   # Binary segmentation: background + mining
   classes: 1
   # Activation for output layer

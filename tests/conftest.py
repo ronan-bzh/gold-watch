@@ -14,7 +14,7 @@ TARGET_CRS = "EPSG:2972"
 
 # Synthetic image parameters
 IMAGE_SIZE = 512
-NUM_BANDS = 9
+NUM_BANDS = 7
 RESOLUTION = 10.0
 ORIGIN_X = 200_000.0
 ORIGIN_Y = 500_000.0
@@ -29,7 +29,10 @@ def _image_bounds() -> tuple[float, float, float, float]:
 
 @pytest.fixture
 def synthetic_geotiff(tmp_path: Path) -> Path:
-    """Create a 512x512 synthetic 9-band GeoTIFF with valid CRS and transform."""
+    """Create a 512x512 synthetic 7-band GeoTIFF with valid CRS and transform.
+
+    Bands 1-6 are spectral bands; band 7 is tagged as SCL for cloud masking.
+    """
     geotiff_path = tmp_path / "synthetic_image.tif"
 
     transform = from_origin(ORIGIN_X, ORIGIN_Y + IMAGE_SIZE * RESOLUTION, RESOLUTION, RESOLUTION)
@@ -47,6 +50,10 @@ def synthetic_geotiff(tmp_path: Path) -> Path:
         transform=transform,
     ) as dst:
         dst.write(data)
+
+    # Tag the last band as SCL so load_scl_band can find it
+    with rasterio.open(geotiff_path, "r+") as dst:
+        dst.set_band_description(NUM_BANDS, "SCL")
 
     return geotiff_path
 

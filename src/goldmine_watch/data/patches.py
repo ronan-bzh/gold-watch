@@ -1,12 +1,16 @@
 """Patch extraction from large satellite images and label masks."""
 
+import logging
 from pathlib import Path
 
 import numpy as np
 import rasterio
 from rasterio.windows import Window
 
+from goldmine_watch.data.cloud_mask import compute_valid_fraction, create_cloud_mask, load_scl_band
 from goldmine_watch.data.ingest import burn_mask, load_labels
+
+logger = logging.getLogger(__name__)
 
 
 def make_patch(
@@ -51,6 +55,9 @@ def generate_sliding_window_patches(
     stride: int | None = None,
     max_patches: int = 50,
     output_dir: str | Path | None = None,
+    cloud_mask_path: str | Path | None = None,
+    min_valid_fraction: float = 0.0,
+    invalid_classes: list[int] | None = None,
 ) -> list[tuple[np.ndarray, np.ndarray]]:
     """Generate patches using a sliding window over the image.
 
@@ -61,6 +68,12 @@ def generate_sliding_window_patches(
         stride: Step size between patches. Defaults to patch_size (no overlap).
         max_patches: Maximum number of patches to generate.
         output_dir: If provided, save each patch as .npy files to this directory.
+        cloud_mask_path: Optional path to a separate SCL GeoTIFF. If provided,
+            patches with valid fraction below ``min_valid_fraction`` are skipped.
+        min_valid_fraction: Minimum fraction of valid (non-cloud) pixels required
+            for a patch to be kept. Defaults to 0.0 (no filtering).
+        invalid_classes: SCL classes to treat as invalid. Defaults to
+            [0, 3, 8, 9] when *None*.
 
     Returns:
         List of (image_patch, mask_patch) tuples.
@@ -77,14 +90,40 @@ def generate_sliding_window_patches(
         width = src.width
         mask = burn_mask(gdf, image_path)
 
+    # Load cloud mask if requested
+    cloud_mask: np.ndarray | None = None
+    if min_valid_fraction > 0.0 or cloud_mask_path is not None:
+        try:
+            scl = load_scl_band(image_path, scl_path=cloud_mask_path)
+            cloud_mask = create_cloud_mask(scl, invalid_classes=invalid_classes)
+        except FileNotFoundError:
+            if cloud_mask_path is not None:
+                raise
+            logger.warning(
+                "Cloud mask filtering requested but no SCL band found for %s. "
+                "Proceeding without cloud filtering.",
+                image_path,
+            )
+
     patches: list[tuple[np.ndarray, np.ndarray]] = []
     patch_id = 0
+    rejected = 0
 
     for y in range(0, height - patch_size + 1, stride):
         for x in range(0, width - patch_size + 1, stride):
             if len(patches) >= max_patches:
                 break
+
             image_patch, mask_patch = _extract_patch(image_path, mask, x, y, patch_size)
+
+            # Check cloud coverage if we have a cloud mask
+            if cloud_mask is not None:
+                patch_cloud_mask = cloud_mask[y : y + patch_size, x : x + patch_size]
+                valid_frac = compute_valid_fraction(patch_cloud_mask)
+                if valid_frac < min_valid_fraction:
+                    rejected += 1
+                    continue
+
             patches.append((image_patch, mask_patch))
 
             if output_dir is not None:
@@ -96,6 +135,11 @@ def generate_sliding_window_patches(
             patch_id += 1
         if len(patches) >= max_patches:
             break
+
+    if rejected > 0:
+        logger.info(
+            "Rejected %d cloudy patches (threshold %.1f%%)", rejected, min_valid_fraction * 100
+        )
 
     return patches
 

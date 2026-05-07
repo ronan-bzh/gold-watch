@@ -10,12 +10,10 @@ from shapely.geometry import box
 
 logger = logging.getLogger(__name__)
 
-EXPECTED_BAND_COUNT = 9
+EXPECTED_BAND_COUNT = 7
 
 
-def validate_image(
-    image_path: Path, expected_band_count: int | None = None
-) -> dict[str, Any]:
+def validate_image(image_path: Path, expected_band_count: int | None = None) -> dict[str, Any]:
     """Check a GeoTIFF has expected bands, CRS, and resolution.
 
     Args:
@@ -42,9 +40,7 @@ def validate_image(
         bounds = src.bounds
 
     if band_count != expected_band_count:
-        raise ValueError(
-            f"Expected {expected_band_count} bands, got {band_count} in {image_path}"
-        )
+        raise ValueError(f"Expected {expected_band_count} bands, got {band_count} in {image_path}")
 
     if crs is None:
         raise ValueError(f"CRS is undefined for {image_path}")
@@ -57,9 +53,7 @@ def validate_image(
         raise ValueError(f"Invalid resolution ({res_x}, {res_y}) in {image_path}")
 
     if abs(res_x - res_y) > 1e-6:
-        raise ValueError(
-            f"Non-square pixels: x_res={res_x}, y_res={res_y} in {image_path}"
-        )
+        raise ValueError(f"Non-square pixels: x_res={res_x}, y_res={res_y} in {image_path}")
 
     return {
         "crs": crs.to_string(),
@@ -100,15 +94,13 @@ def validate_labels(labels_path: Path, expected_crs: str) -> gpd.GeoDataFrame:
     if gdf.crs is None:
         raise ValueError(f"CRS is undefined for {labels_path}")
 
-    if not gdf.crs.to_string() == expected_crs:
+    if gdf.crs.to_string() != expected_crs:
         gdf = gdf.to_crs(expected_crs)
 
     return gdf
 
 
-def check_spatial_overlap(
-    image_bounds: Any, labels_gdf: gpd.GeoDataFrame
-) -> dict[str, Any]:
+def check_spatial_overlap(image_bounds: Any, labels_gdf: gpd.GeoDataFrame) -> dict[str, Any]:
     """Check if labels intersect with image bounds and return detailed stats.
 
     Args:
@@ -125,9 +117,7 @@ def check_spatial_overlap(
               the image bounds (0.0–1.0).
             - outside_labels (int): Number of labels completely outside.
     """
-    image_box = box(
-        image_bounds.left, image_bounds.bottom, image_bounds.right, image_bounds.top
-    )
+    image_box = box(image_bounds.left, image_bounds.bottom, image_bounds.right, image_bounds.top)
 
     total_label_area = 0.0
     overlapping_area = 0.0
@@ -147,9 +137,7 @@ def check_spatial_overlap(
         else:
             outside_count += 1
 
-    overlap_fraction = (
-        overlapping_area / total_label_area if total_label_area > 0 else 0.0
-    )
+    overlap_fraction = overlapping_area / total_label_area if total_label_area > 0 else 0.0
 
     if overlap_fraction < 0.5:
         logger.warning(

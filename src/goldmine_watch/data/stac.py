@@ -32,7 +32,11 @@ def download_one_scene(
         Path to the saved GeoTIFF.
     """
     if bands is None:
-        bands = ["B02", "B03", "B04", "B08", "B11", "B12"]
+        bands = ["B02", "B03", "B04", "B08", "B11", "B12", "SCL"]
+
+    # Ensure SCL is always included for cloud masking
+    if "SCL" not in bands:
+        bands = bands + ["SCL"]
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -86,6 +90,11 @@ def download_one_scene(
         transform=transform,
     ) as dst:
         dst.write(data)
+
+    # Tag the SCL band so load_scl_band can find it
+    with rasterio.open(output_path, "r+") as dst:
+        scl_index = bands.index("SCL") + 1
+        dst.set_band_description(scl_index, "SCL")
 
     print(f"Saved to {output_path}")
     return output_path

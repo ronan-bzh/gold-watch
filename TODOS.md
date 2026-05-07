@@ -54,3 +54,18 @@ This file captures deferred work that was considered during the engineering revi
 - **Why:** The `.gitignore` approach keeps large files out of git but provides no versioning. DVC enables reproducible experiments by tracking exact data versions.
 - **Priority:** Low (post-MVP)
 - **Status:** Not started
+
+## TODO-6: Add checkpoint resume to training loop
+
+- **What:** Save optimizer state, scheduler state, and current epoch alongside the best model checkpoint so that `make train` can resume after a crash instead of restarting from epoch 0.
+- **Why:** Training runs are 2-4 hours. A crash at epoch 30 of 50 means losing hours of GPU time. Resume is standard practice for long training jobs.
+- **Pros:**
+  - Crash-resilient training from day one.
+  - Reduces wasted GPU time during hyperparameter tuning.
+- **Cons:**
+  - Changes checkpoint format (needs to store optimizer/scheduler state).
+  - Adds ~50 lines to `training/engine.py`.
+- **Context:** The current design only saves the best model weights. Resume requires extending the checkpoint format and adding a `--resume` flag to the training CLI. Should be designed alongside the manifest system so that resumed runs log correctly.
+- **Depends on:** Milestone 3 (training loop) and manifest system.
+- **Priority:** Medium (post-MVP)
+- **Status:** Not started

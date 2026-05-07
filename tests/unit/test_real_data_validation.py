@@ -27,7 +27,7 @@ class TestValidateImage:
 
         assert isinstance(result, dict)
         assert result["crs"] == TARGET_CRS
-        assert result["band_count"] == 9
+        assert result["band_count"] == 7
         assert result["width"] == 512
         assert result["height"] == 512
         assert result["resolution"] == 10.0
@@ -52,14 +52,14 @@ class TestValidateImage:
         ) as dst:
             dst.write(data)
 
-        with pytest.raises(ValueError, match="Expected 9 bands, got 6"):
+        with pytest.raises(ValueError, match="Expected 7 bands, got 6"):
             validate_image(geotiff_path)
 
     def test_missing_crs_raises(self, tmp_path: Path) -> None:
         """Should raise ValueError if CRS is undefined."""
         geotiff_path = tmp_path / "no_crs.tif"
         transform = from_origin(200_000.0, 510_000.0, 10.0, 10.0)
-        data = np.random.randint(0, 10_000, size=(9, 512, 512), dtype=np.uint16)
+        data = np.random.randint(0, 10_000, size=(7, 512, 512), dtype=np.uint16)
 
         with rasterio.open(
             geotiff_path,
@@ -67,7 +67,7 @@ class TestValidateImage:
             driver="GTiff",
             height=512,
             width=512,
-            count=9,
+            count=7,
             dtype=data.dtype,
             crs=None,
             transform=transform,
@@ -114,13 +114,9 @@ class TestSpatialOverlap:
 
     def test_full_overlap_returns_true(self) -> None:
         """Labels inside image bounds -> True."""
-        image_bounds = type(
-            "Bounds", (), {"left": 0, "bottom": 0, "right": 1000, "top": 1000}
-        )
+        image_bounds = type("Bounds", (), {"left": 0, "bottom": 0, "right": 1000, "top": 1000})
         polygon = Polygon([(100, 100), (900, 100), (900, 900), (100, 900)])
-        gdf = gpd.GeoDataFrame(
-            {"label": ["mining"]}, geometry=[polygon], crs=TARGET_CRS
-        )
+        gdf = gpd.GeoDataFrame({"label": ["mining"]}, geometry=[polygon], crs=TARGET_CRS)
 
         result = check_spatial_overlap(image_bounds, gdf)
         assert result["has_overlap"] is True
@@ -131,15 +127,9 @@ class TestSpatialOverlap:
 
     def test_no_overlap_returns_false(self) -> None:
         """Labels far from image -> False."""
-        image_bounds = type(
-            "Bounds", (), {"left": 0, "bottom": 0, "right": 1000, "top": 1000}
-        )
-        polygon = Polygon(
-            [(5000, 5000), (6000, 5000), (6000, 6000), (5000, 6000)]
-        )
-        gdf = gpd.GeoDataFrame(
-            {"label": ["mining"]}, geometry=[polygon], crs=TARGET_CRS
-        )
+        image_bounds = type("Bounds", (), {"left": 0, "bottom": 0, "right": 1000, "top": 1000})
+        polygon = Polygon([(5000, 5000), (6000, 5000), (6000, 6000), (5000, 6000)])
+        gdf = gpd.GeoDataFrame({"label": ["mining"]}, geometry=[polygon], crs=TARGET_CRS)
 
         result = check_spatial_overlap(image_bounds, gdf)
         assert result["has_overlap"] is False

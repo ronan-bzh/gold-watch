@@ -50,7 +50,17 @@ AI-assisted geospatial detection of potential gold mining surfaces in French Gui
      data/french_guiana_mines_2023.geojson
    ```
 
-5. **Run the full pipeline:**
+5. **Mask clouds using the SCL band:**
+   ```bash
+   python scripts/demo_feature2_cloud_mask.py data/raw/sentinel2_scene.tif
+   ```
+
+   Outputs:
+   - `outputs/demo/cloud_rgb.png` — Original RGB
+   - `outputs/demo/cloud_mask.png` — Black = cloud, white = clear
+   - `outputs/demo/cloud_masked.png` — RGB with clouds highlighted in red
+
+6. **Run the full pipeline:**
    ```bash
    make data
    make train
@@ -59,7 +69,7 @@ AI-assisted geospatial detection of potential gold mining surfaces in French Gui
    make export
    ```
 
-5. **Run tests:**
+7. **Run tests:**
    ```bash
    make test
    ```
@@ -94,6 +104,8 @@ All pipeline parameters are centralized in `configs/mvp.yaml`. Copy and modify t
 |---|---|---|
 | Setup | `make setup` | Install dependencies and pre-commit hooks |
 | Download | `python scripts/demo_feature0_download.py ...` | Download Sentinel-2 scenes from Copernicus Data Space |
+| Validate | `python scripts/demo_feature1_validate.py ...` | Validate image metadata and label overlap |
+| Cloud mask | `python scripts/demo_feature2_cloud_mask.py ...` | Visualize cloud masking using the SCL band |
 | Data | `make data` | Ingest labels, retrieve imagery, generate patches |
 | Train | `make train` | Train the segmentation model |
 | Evaluate | `make evaluate` | Compute metrics on the test set |

@@ -19,7 +19,7 @@ class TestMakePatch:
         image_patch, mask_patch = make_patch(
             synthetic_geotiff, synthetic_labels, x=0, y=0, size=256
         )
-        assert image_patch.shape == (9, 256, 256)
+        assert image_patch.shape == (7, 256, 256)
         assert mask_patch.shape == (256, 256)
 
     def test_make_patch_mask_values(self, synthetic_geotiff: Path, synthetic_labels: Path) -> None:

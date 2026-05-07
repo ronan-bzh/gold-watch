@@ -148,13 +148,11 @@ class TestSearchScenes:
 class TestDownloadScene:
     """Test suite for scene download via Sentinel Hub Process API."""
 
-    def test_download_writes_geotiff(
-        self, tmp_path: Path, requests_mock: Mocker
-    ) -> None:
+    def test_download_writes_geotiff(self, tmp_path: Path, requests_mock: Mocker) -> None:
         """Should create a valid GeoTIFF at output_path."""
         requests_mock.post(
             "https://sh.dataspace.copernicus.eu/api/v1/process",
-            content=_make_geotiff_bytes(count=6),
+            content=_make_geotiff_bytes(count=7),
         )
 
         item = {
@@ -171,18 +169,16 @@ class TestDownloadScene:
 
         assert result.exists()
         with rasterio.open(result) as src:
-            assert src.count == 6
+            assert src.count == 7
             assert src.crs is not None
             assert src.width == 64
             assert src.height == 64
 
-    def test_band_selection(
-        self, tmp_path: Path, requests_mock: Mocker
-    ) -> None:
+    def test_band_selection(self, tmp_path: Path, requests_mock: Mocker) -> None:
         """Should only download requested bands."""
         requests_mock.post(
             "https://sh.dataspace.copernicus.eu/api/v1/process",
-            content=_make_geotiff_bytes(count=3),
+            content=_make_geotiff_bytes(count=4),
         )
 
         item = {
@@ -199,18 +195,19 @@ class TestDownloadScene:
 
         assert result.exists()
         with rasterio.open(result) as src:
-            assert src.count == 3
+            # 3 requested + SCL auto-appended = 4 bands
+            assert src.count == 4
 
         # Verify the Process API payload contained the right bands
         history = requests_mock.request_history
         process_requests = [
-            r for r in history
-            if r.url == "https://sh.dataspace.copernicus.eu/api/v1/process"
+            r for r in history if r.url == "https://sh.dataspace.copernicus.eu/api/v1/process"
         ]
         assert len(process_requests) == 1
         payload = process_requests[0].json()
         assert '"B02"' in payload["evalscript"]
         assert '"B03"' in payload["evalscript"]
         assert '"B04"' in payload["evalscript"]
+        assert '"SCL"' in payload["evalscript"]
         assert '"B08"' not in payload["evalscript"]
         assert "units" in payload["evalscript"]
