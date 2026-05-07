@@ -1,7 +1,7 @@
 # GoldMine Watch — Pipeline Orchestration
 # Run `make help` to see available targets.
 
-.PHONY: help setup install test lint format clean data train evaluate predict export
+.PHONY: help setup install test lint format clean
 
 PYTHON := python3
 PIP := $(PYTHON) -m pip
@@ -10,15 +10,20 @@ CONFIG := configs/mvp.yaml
 help:
 	@echo "GoldMine Watch — Available targets:"
 	@echo "  make setup      Install dependencies and pre-commit hooks"
-	@echo "  make data       Run data ingestion and preprocessing"
-	@echo "  make train      Train the segmentation model"
-	@echo "  make evaluate   Evaluate model on test set"
-	@echo "  make predict    Run inference on pilot area"
-	@echo "  make export     Export predictions to GeoTIFF and GeoPackage"
+	@echo "  make install    Install package in editable mode"
 	@echo "  make test       Run the full test suite"
 	@echo "  make lint       Run ruff and mypy"
 	@echo "  make format     Run black and ruff --fix"
 	@echo "  make clean      Remove processed artifacts and outputs"
+	@echo ""
+	@echo "Pipeline stages (run manually):"
+	@echo "  python scripts/plot_labels.py data/raw/labels.gpkg"
+	@echo "  python scripts/download_one_scene.py"
+	@echo "  python scripts/make_patches.py <image.tif> <labels.gpkg>"
+	@echo "  python -m goldmine_watch.training.train --fake <img> <labels>"
+	@echo "  python -m goldmine_watch.training.train --patches <dir>"
+	@echo "  python -m goldmine_watch.inference.predict <patch.npy> <model.pth>"
+	@echo "  python -m goldmine_watch.inference.predict_big <image.tif> <model.pth>"
 
 setup: install
 	pre-commit install
@@ -27,44 +32,22 @@ setup: install
 install:
 	$(PIP) install -e ".[dev]"
 
-data:
-	@echo "Running data ingestion and preprocessing..."
-	$(PYTHON) -m goldmine_watch.data.ingest --config $(CONFIG)
-	$(PYTHON) -m goldmine_watch.data.preprocess --config $(CONFIG)
-	$(PYTHON) -m goldmine_watch.data.patches --config $(CONFIG)
-
-train:
-	@echo "Training segmentation model..."
-	$(PYTHON) -m goldmine_watch.training.train --config $(CONFIG)
-
-evaluate:
-	@echo "Evaluating on test set..."
-	$(PYTHON) -m goldmine_watch.training.evaluate --config $(CONFIG)
-
-predict:
-	@echo "Running inference on pilot area..."
-	$(PYTHON) -m goldmine_watch.inference.predict --config $(CONFIG)
-
-export:
-	@echo "Exporting predictions..."
-	$(PYTHON) -m goldmine_watch.export.raster --config $(CONFIG)
-	$(PYTHON) -m goldmine_watch.export.vector --config $(CONFIG)
-
 test:
-	pytest tests/ -v --tb=short
+	$(PYTHON) -m pytest tests/unit -v --tb=short
 
 lint:
-	ruff check src tests
+	ruff check src tests scripts
 	mypy src
 
 format:
-	black src tests
-	ruff check --fix src tests
+	black src tests scripts
+	ruff check --fix src tests scripts
 
 clean:
 	rm -rf data/processed/*
 	rm -rf data/splits/*
 	rm -rf outputs/*
+	rm -rf models/*
 	rm -rf .pytest_cache
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
