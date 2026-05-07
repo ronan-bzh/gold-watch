@@ -25,6 +25,24 @@ AI-assisted geospatial detection of potential gold mining surfaces in French Gui
      --output data/raw/sentinel2_scene.tif
    ```
 
+   Preview the downloaded image:
+   ```bash
+   python3 -c "
+   import rasterio, numpy as np, matplotlib.pyplot as plt
+   with rasterio.open('data/raw/sentinel2_scene.tif') as src:
+       data = src.read()
+       rgb = data[[2,1,0],:,:].astype(float)  # B04, B03, B02
+       for i in range(3):
+           b = rgb[i]
+           p2, p98 = np.percentile(b[b>0], (2,98))
+           rgb[i] = np.clip((b-p2)/(p98-p2), 0, 1)
+       plt.imshow(np.transpose((rgb*255).astype(np.uint8), (1,2,0)))
+       plt.axis('off')
+       plt.savefig('data/raw/preview.png', dpi=150, bbox_inches='tight')
+       print('Saved preview to data/raw/preview.png')
+   "
+   ```
+
 4. **Run the full pipeline:**
    ```bash
    make data
