@@ -10,6 +10,7 @@ import rasterio
 import torch
 
 from goldmine_watch.inference.blender import blend_predictions, normalize_canvas
+from goldmine_watch.inference.evaluate import evaluate_prediction
 from goldmine_watch.inference.tiler import tile_image
 from goldmine_watch.models.unet import get_model
 
@@ -95,7 +96,13 @@ def main() -> None:
     parser.add_argument("--tile-size", type=int, default=256)
     parser.add_argument("--overlap", type=int, default=64)
     parser.add_argument("--device", default="cpu")
+    parser.add_argument("--evaluate", action="store_true", help="Evaluate against ground truth")
+    parser.add_argument("--labels", help="Path to vector labels (required with --evaluate)")
+    parser.add_argument("--threshold", type=float, default=0.5, help="Evaluation threshold")
     args = parser.parse_args()
+
+    if args.evaluate and not args.labels:
+        parser.error("--labels is required when --evaluate is set")
 
     # Infer channels from first tile
     first_tile, _ = tile_image(args.image, tile_size=args.tile_size, overlap=args.overlap)[0]
@@ -110,6 +117,17 @@ def main() -> None:
         in_channels=in_channels,
         device=args.device,
     )
+
+    if args.evaluate:
+        metrics = evaluate_prediction(
+            Path(args.out),
+            Path(args.labels),
+            threshold=args.threshold,
+        )
+        print(
+            f"IoU: {metrics['iou']:.2f} | F1: {metrics['f1']:.2f} | "
+            f"Precision: {metrics['precision']:.2f} | Recall: {metrics['recall']:.2f}"
+        )
 
 
 if __name__ == "__main__":

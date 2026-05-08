@@ -128,11 +128,72 @@ AI-assisted geospatial detection of potential gold mining surfaces in French Gui
      data/raw/sentinel2_scene.tif \
      models/best_model.pth \
      data/french_guiana_mines_2023.geojson \
-     --threshold 0.5
+     --threshold 0.5 \
+     --device cpu
    ```
-   Outputs:
-   - `outputs/demo/inference_comparison.png` — 3-panel figure (RGB, ground truth, prediction)
-   - `outputs/demo/inference_metrics.json` — Pixel-wise IoU, F1, precision, recall
+
+   **Arguments:**
+   - `image` — Input GeoTIFF to run inference on
+   - `model` — Path to the trained checkpoint (e.g. `models/best_model.pth`)
+   - `labels` — Ground-truth vector labels for evaluation
+   - `--threshold` — Probability threshold for binarization (default: 0.5)
+   - `--tile-size` — Sliding-window tile size in pixels (default: 256)
+   - `--overlap` — Overlap between adjacent tiles (default: 64)
+   - `--device` — `cpu` or `cuda` (default: cpu)
+   - `--output-dir` — Where to save outputs (default: `outputs/demo/`)
+
+   **What happens during inference:**
+   - The image is split into overlapping tiles (default 256 px, 64 px overlap)
+   - Each tile is run through the model to produce a probability map
+   - Overlapping predictions are averaged (blended) into a full-size probability raster
+   - The raster is compared pixel-wise to the ground-truth labels
+
+   **Console output:**
+   ```
+   Running inference on data/raw/sentinel2_scene.tif...
+   Prediction saved to outputs/demo/inference_prediction.tif
+   Blending complete.
+   Evaluating against ground truth...
+   IoU: 0.52 | F1: 0.68 | Precision: 0.61 | Recall: 0.78
+   Saved metrics to outputs/demo/inference_metrics.json
+   Saved comparison to outputs/demo/inference_comparison.png
+   ```
+
+   **Outputs:**
+   - `outputs/demo/inference_prediction.tif` — Full-scene probability raster (GeoTIFF, float32, 0–1)
+   - `outputs/demo/inference_comparison.png` — 3-panel figure:
+     - Panel 1: Original RGB image
+     - Panel 2: Ground truth mask (green)
+     - Panel 3: Prediction overlay (red = predicted, yellow = overlap, green = missed)
+   - `outputs/demo/inference_metrics.json` — Pixel-wise metrics:
+     ```json
+     {
+       "threshold": 0.5,
+       "iou": 0.52,
+       "f1": 0.68,
+       "precision": 0.61,
+       "recall": 0.78
+     }
+     ```
+
+   **Run from Python:**
+   ```python
+   from goldmine_watch.inference.predict_big import predict_big_image
+   from goldmine_watch.inference.evaluate import evaluate_prediction
+   from pathlib import Path
+
+   pred_path = predict_big_image(
+       "data/raw/sentinel2_scene.tif",
+       "models/best_model.pth",
+       "outputs/prediction.tif",
+       tile_size=256,
+       overlap=64,
+       device="cpu",
+   )
+
+   metrics = evaluate_prediction(pred_path, Path("data/raw/mining_surfaces.gpkg"))
+   print(metrics)
+   ```
 
 9. **Build a temporal composite (optional):**
    ```bash
