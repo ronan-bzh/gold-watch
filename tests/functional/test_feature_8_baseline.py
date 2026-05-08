@@ -7,12 +7,10 @@ including NDVI/BSI computation and polygon extraction.
 from pathlib import Path
 
 import numpy as np
-import pytest
 import rasterio
 from rasterio.transform import from_origin
 
 from goldmine_watch.baseline.rules import (
-    compute_bsi,
     compute_ndvi,
     detect_mining_rules,
     rules_to_polygons,
