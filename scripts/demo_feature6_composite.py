@@ -2,6 +2,8 @@
 """Demo script for Feature 6: Temporal Compositing.
 
 Usage:
+    export COPERNICUS_CLIENT_ID="your-client-id"
+    export COPERNICUS_CLIENT_SECRET="your-client-secret"
     python scripts/demo_feature6_composite.py \
       --bbox "-54.1,5.3,-53.9,5.5" \
       --start 2023-01-01 \
@@ -10,6 +12,7 @@ Usage:
 """
 
 import argparse
+import os
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -78,6 +81,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    client_id = os.environ.get("COPERNICUS_CLIENT_ID")
+    client_secret = os.environ.get("COPERNICUS_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        raise SystemExit(
+            "Error: Set COPERNICUS_CLIENT_ID and COPERNICUS_CLIENT_SECRET environment variables"
+        )
+
     raw_bbox = [float(x) for x in args.bbox.split(",")]
     if len(raw_bbox) != 4:
         raise ValueError("bbox must have exactly 4 values: min_x,min_y,max_x,max_y")
@@ -94,6 +104,8 @@ def main() -> None:
         output_path=output_path,
         max_cloud_cover=args.max_cloud,
         aggregator=args.aggregator,
+        client_id=client_id,
+        client_secret=client_secret,
     )
 
     # Download a single scene for comparison
@@ -105,6 +117,8 @@ def main() -> None:
             date=f"{args.start}/{args.end}",
             output_path=single_scene_path,
             max_cloud_cover=args.max_cloud,
+            client_id=client_id,
+            client_secret=client_secret,
         )
     except RuntimeError as exc:
         print(f"Could not download single scene for comparison: {exc}")

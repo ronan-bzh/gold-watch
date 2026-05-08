@@ -58,7 +58,12 @@ def _validate(
 
     avg_loss = total_loss / len(loader)
     denom_iou = total_tp + total_fp + total_fn
-    iou = total_tp / denom_iou if denom_iou > 0 else 1.0
+    # If there are no positive targets and no predictions, return 0 IoU
+    # to avoid falsely claiming perfect performance on empty validation sets.
+    if denom_iou == 0:
+        iou = 0.0
+    else:
+        iou = total_tp / denom_iou
     denom_pr = total_tp + total_fp
     precision = total_tp / denom_pr if denom_pr > 0 else 0.0
     denom_re = total_tp + total_fn
@@ -113,6 +118,32 @@ def train_patches(
     else:
         train_files, val_files = spatial_train_val_split(patches_dir, val_ratio=0.2)
 
+    # Ensure training set contains some positive patches
+    train_has_positive = False
+    for f in train_files:
+        m = np.load(patches_dir / f.name.replace("image_", "mask_"))
+        if m.sum() > 0:
+            train_has_positive = True
+            break
+
+    if not train_has_positive and val_files:
+        print("Warning: training set has no positive patches. Moving positives from val...")
+        moved = []
+        kept_val = []
+        for f in val_files:
+            m = np.load(patches_dir / f.name.replace("image_", "mask_"))
+            if m.sum() > 0:
+                moved.append(f)
+            else:
+                kept_val.append(f)
+        train_files = train_files + moved
+        val_files = kept_val
+        # Move extra negative patches to val to restore ~20% split
+        target_val = max(1, int(0.2 * (len(train_files) + len(val_files))))
+        while len(val_files) < target_val and train_files:
+            # Pop from front to avoid removing recently-added positives at the end
+            val_files.insert(0, train_files.pop(0))
+
     train_dataset = PatchDataset(patches_dir, augment=True, image_files=train_files)
     val_dataset = PatchDataset(
         patches_dir if val_patches_dir is None else val_patches_dir,
@@ -126,9 +157,27 @@ def train_patches(
     sample_image, _ = train_dataset[0]
     in_channels = sample_image.shape[0]
 
-    model = get_model(in_channels=in_channels).to(device_obj)
-    criterion = nn.BCEWithLogitsLoss()
+    model = get_model(in_channels=in_channels, encoder="resnet34").to(device_obj)
+
+    # Compute class imbalance weight from training data.
+    total_pos = 0
+    total_pixels = 0
+    for _, mask in train_dataset:
+        total_pos += (mask > 0.5).sum().item()
+        total_pixels += mask.numel()
+    pos_weight_val = min(total_pixels / max(total_pos, 1.0), 500.0)
+    pos_weight_tensor = torch.tensor([pos_weight_val], dtype=torch.float32).to(device_obj)
+    print(
+        f"Training samples: {len(train_dataset)} | "
+        f"Positive pixels: {total_pos}/{total_pixels} ({100*total_pos/total_pixels:.4f}%) | "
+        f"pos_weight: {pos_weight_val:.2f}"
+    )
+
+    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight_tensor)
     optimizer = optim.Adam(model.parameters(), lr=lr)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="max", factor=0.5, patience=3
+    )
 
     history: dict[str, list[float]] = {
         "train_loss": [],
@@ -168,9 +217,13 @@ def train_patches(
         print(
             f"Epoch {epoch:02d}/{epochs} — "
             f"Train Loss: {avg_train_loss:.4f} | "
-            f"Val IoU: {val_iou:.2f} | "
-            f"Val F1: {val_f1:.2f}"
+            f"Val Loss: {val_loss:.4f} | "
+            f"Val IoU: {val_iou:.4f} | "
+            f"Val F1: {val_f1:.4f} | "
+            f"LR: {optimizer.param_groups[0]['lr']:.6f}"
         )
+
+        scheduler.step(val_iou)
 
         # Save checkpoint every epoch
         ckpt_path = output_dir / f"epoch_{epoch:03d}.pth"

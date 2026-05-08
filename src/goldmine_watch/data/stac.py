@@ -3,17 +3,35 @@
 Single-scene download for Milestone 5. Composite download for Milestone 6.
 """
 
+import os
+import tempfile
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
-import planetary_computer
-import pystac_client
 import rasterio
-import stackstac
 import xarray as xr
-from rasterio.crs import CRS
 
 from goldmine_watch.data.cloud_mask import create_cloud_mask
+from goldmine_watch.data.copernicus import (
+    download_scene,
+    get_access_token,
+    search_scenes,
+)
+
+
+def _require_credentials(
+    client_id: str | None, client_secret: str | None
+) -> tuple[str, str]:
+    """Return Copernicus credentials from arguments or environment variables."""
+    client_id = client_id or os.environ.get("COPERNICUS_CLIENT_ID")
+    client_secret = client_secret or os.environ.get("COPERNICUS_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        raise RuntimeError(
+            "Copernicus credentials missing. Set COPERNICUS_CLIENT_ID and "
+            "COPERNICUS_CLIENT_SECRET environment variables."
+        )
+    return client_id, client_secret
 
 
 def download_one_scene(
@@ -22,8 +40,10 @@ def download_one_scene(
     output_path: str | Path,
     bands: list[str] | None = None,
     max_cloud_cover: float = 20.0,
+    client_id: str | None = None,
+    client_secret: str | None = None,
 ) -> Path:
-    """Download a single Sentinel-2 scene from Microsoft Planetary Computer.
+    """Download a single Sentinel-2 scene from Copernicus Data Space.
 
     Args:
         bbox: Bounding box as (min_x, min_y, max_x, max_y) in EPSG:4326.
@@ -31,6 +51,8 @@ def download_one_scene(
         output_path: Where to save the output GeoTIFF.
         bands: List of band names to retrieve. Defaults to RGB + NIR + SWIR.
         max_cloud_cover: Maximum allowed cloud cover percentage.
+        client_id: Copernicus OAuth Client ID (falls back to env var).
+        client_secret: Copernicus OAuth Client Secret (falls back to env var).
 
     Returns:
         Path to the saved GeoTIFF.
@@ -45,63 +67,22 @@ def download_one_scene(
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    catalog = pystac_client.Client.open(
-        "https://planetarycomputer.microsoft.com/api/stac/v1",
-        modifier=planetary_computer.sign_inplace,
-    )
+    client_id, client_secret = _require_credentials(client_id, client_secret)
+    token = get_access_token(client_id, client_secret)
 
-    search = catalog.search(
-        collections=["sentinel-2-l2a"],
-        bbox=bbox,
-        datetime=date,
-        query={"eo:cloud_cover": {"lt": max_cloud_cover}},
-        max_items=1,
-    )
-    items = list(search.get_all_items())
-
-    if not items:
+    scenes = search_scenes(bbox, date, token, max_cloud_cover=max_cloud_cover)
+    if not scenes:
         raise RuntimeError(f"No scenes found for bbox={bbox} date={date}")
 
-    item = items[0]
-    print(
-        f"Found scene: {item.id} (cloud cover: {item.properties.get('eo:cloud_cover', 'unknown')}%)"
+    item = scenes[0]
+    cloud_cover = item.get("properties", {}).get("eo:cloud_cover", "unknown")
+    print(f"Found scene: {item['id']} (cloud cover: {cloud_cover}%)")
+
+    saved_path = download_scene(
+        item, token, output_path, bands=bands, bbox=bbox
     )
-
-    stack = stackstac.stack(
-        [item],
-        assets=bands,
-        bounds_latlon=bbox,
-        resolution=10,
-        dtype="uint16",
-        rescale=False,
-        epsg=32622,
-    )
-
-    # Write to GeoTIFF
-    data = stack.squeeze().values  # (bands, y, x)
-    transform = stackstac.bounds_to_transform(stack.attrs["bounds"], stack.shape[-2:])
-    crs = CRS.from_epsg(32622)  # UTM 22N — French Guiana fallback
-
-    with rasterio.open(
-        output_path,
-        "w",
-        driver="GTiff",
-        height=data.shape[1],
-        width=data.shape[2],
-        count=data.shape[0],
-        dtype=data.dtype,
-        crs=crs,
-        transform=transform,
-    ) as dst:
-        dst.write(data)
-
-    # Tag the SCL band so load_scl_band can find it
-    with rasterio.open(output_path, "r+") as dst:
-        scl_index = bands.index("SCL") + 1
-        dst.set_band_description(scl_index, "SCL")
-
-    print(f"Saved to {output_path}")
-    return output_path
+    print(f"Saved to {saved_path}")
+    return saved_path
 
 
 def _composite_scenes(stack: xr.DataArray, aggregator: str) -> xr.DataArray:
@@ -132,6 +113,8 @@ def download_composite(
     bands: list[str] | None = None,
     max_cloud_cover: float = 20.0,
     aggregator: str = "median",
+    client_id: str | None = None,
+    client_secret: str | None = None,
 ) -> Path:
     """Download multiple scenes and composite them.
 
@@ -143,6 +126,8 @@ def download_composite(
         bands: Band names to retrieve. Defaults to RGB + NIR + SWIR + SCL.
         max_cloud_cover: Per-scene cloud threshold.
         aggregator: "median" or "mean".
+        client_id: Copernicus OAuth Client ID (falls back to env var).
+        client_secret: Copernicus OAuth Client Secret (falls back to env var).
 
     Returns:
         Path to saved composite GeoTIFF.
@@ -157,87 +142,125 @@ def download_composite(
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    catalog = pystac_client.Client.open(
-        "https://planetarycomputer.microsoft.com/api/stac/v1",
-        modifier=planetary_computer.sign_inplace,
-    )
+    client_id, client_secret = _require_credentials(client_id, client_secret)
+    token = get_access_token(client_id, client_secret)
 
     date_range = f"{start_date}/{end_date}"
-    search = catalog.search(
-        collections=["sentinel-2-l2a"],
-        bbox=bbox,
-        datetime=date_range,
-        query={"eo:cloud_cover": {"lt": max_cloud_cover}},
+    scenes = search_scenes(
+        bbox, date_range, token, max_cloud_cover=max_cloud_cover
     )
-    items = list(search.get_all_items())
 
-    if not items:
+    if not scenes:
         raise RuntimeError(f"No scenes found for bbox={bbox} date={date_range}")
 
-    print(f"Found {len(items)} scenes in date range")
-    print(f"After cloud filter: {len(items)} scenes usable")
+    print(f"Found {len(scenes)} scenes in date range")
+    print(f"After cloud filter: {len(scenes)} scenes usable")
 
-    stack = stackstac.stack(
-        items,
-        assets=bands,
-        bounds_latlon=bbox,
-        resolution=10,
-        dtype="uint16",
-        rescale=False,
-        epsg=32622,
-    )
+    tmp_dir = Path(tempfile.mkdtemp(prefix="composite_"))
+    scene_paths: list[Path] = []
 
-    # Separate SCL from spectral bands
-    spectral_bands = [b for b in bands if b != "SCL"]
-    spectral_stack = stack.sel(band=spectral_bands)
-    scl_stack = stack.sel(band=["SCL"])
+    try:
+        for item in scenes:
+            scene_id = item["id"]
+            properties = item.get("properties", {})
+            datetime_str = properties.get("datetime", "")
+            if datetime_str:
+                dt = datetime.fromisoformat(datetime_str.replace("Z", "+00:00"))
+                time_range = {
+                    "from": dt.strftime("%Y-%m-%dT00:00:00Z"),
+                    "to": dt.strftime("%Y-%m-%dT23:59:59Z"),
+                }
+            else:
+                time_range = None
 
-    # Build per-scene cloud masks from SCL
-    scl_data = scl_stack.values[:, 0, :, :].astype(np.uint8)  # (time, y, x)
-    cloud_masks = np.stack(
-        [create_cloud_mask(scl_data[t]) for t in range(scl_data.shape[0])],
-        axis=0,
-    )  # (time, y, x), 1 = clear, 0 = cloud
+            scene_path = tmp_dir / f"{scene_id}.tif"
+            download_scene(
+                item,
+                token,
+                scene_path,
+                bands=bands,
+                bbox=bbox,
+                time_range=time_range,
+            )
+            scene_paths.append(scene_path)
+            print(f"  Downloaded {scene_id}")
 
-    before_cloud_pct = 100.0 * (1.0 - cloud_masks.mean())
+        # Read all scenes into a stack
+        refs = [rasterio.open(p) for p in scene_paths]
+        try:
+            data = np.stack(
+                [src.read().astype(np.float32) for src in refs], axis=0
+            )  # (time, band, y, x)
+            profile = refs[0].profile
+            transform = refs[0].transform
+            crs = refs[0].crs
+        finally:
+            for src in refs:
+                src.close()
 
-    # Mask cloudy pixels with NaN so they don't influence the composite
-    spectral_values = spectral_stack.values.astype(np.float32)  # (time, band, y, x)
-    mask_3d = np.expand_dims(cloud_masks, axis=1)  # (time, 1, y, x)
-    spectral_values[mask_3d == 0] = np.nan
+        # Separate spectral bands from SCL
+        spectral_band_names = [b for b in bands if b != "SCL"]
+        scl_index = bands.index("SCL")
+        spectral_indices = [i for i, b in enumerate(bands) if b != "SCL"]
 
-    spectral_masked = xr.DataArray(
-        spectral_values,
-        dims=spectral_stack.dims,
-        coords=spectral_stack.coords,
-        attrs=spectral_stack.attrs,
-    )
+        spectral_data = data[:, spectral_indices, :, :]  # (time, spectral, y, x)
+        scl_data = data[:, scl_index, :, :].astype(np.uint8)  # (time, y, x)
 
-    print(f"Computing {aggregator} composite...")
-    composite = _composite_scenes(spectral_masked, aggregator)
+        # Build per-scene cloud masks from SCL
+        cloud_masks = np.stack(
+            [create_cloud_mask(scl_data[t]) for t in range(scl_data.shape[0])],
+            axis=0,
+        )  # (time, y, x), 1 = clear, 0 = cloud
 
-    # After aggregation, pixels cloudy in *all* scenes are NaN
-    composite_clear = (~np.isnan(composite.values[0])).astype(np.uint8)
-    after_cloud_pct = 100.0 * (1.0 - composite_clear.mean())
-    print(f"Cloud pixels reduced from {before_cloud_pct:.0f}% → {after_cloud_pct:.0f}%")
+        before_cloud_pct = 100.0 * (1.0 - cloud_masks.mean())
 
-    # Write to GeoTIFF (fill any remaining NaN with 0)
-    data = composite.fillna(0).values.astype(np.float32)  # (bands, y, x)
-    transform = stackstac.bounds_to_transform(stack.attrs["bounds"], data.shape[-2:])
-    crs = CRS.from_epsg(32622)
+        # Mask cloudy pixels with NaN so they don't influence the composite
+        mask_3d = np.expand_dims(cloud_masks, axis=1)  # (time, 1, y, x)
+        spectral_data[mask_3d == 0] = np.nan
 
-    with rasterio.open(
-        output_path,
-        "w",
-        driver="GTiff",
-        height=data.shape[1],
-        width=data.shape[2],
-        count=data.shape[0],
-        dtype=data.dtype,
-        crs=crs,
-        transform=transform,
-    ) as dst:
-        dst.write(data)
+        spectral_masked = xr.DataArray(
+            spectral_data,
+            dims=["time", "band", "y", "x"],
+            coords={
+                "time": range(spectral_data.shape[0]),
+                "band": spectral_band_names,
+            },
+        )
 
-    print(f"Saved to {output_path}")
+        print(f"Computing {aggregator} composite...")
+        composite = _composite_scenes(spectral_masked, aggregator)
+
+        # After aggregation, pixels cloudy in *all* scenes are NaN
+        composite_clear = (~np.isnan(composite.values[0])).astype(np.uint8)
+        after_cloud_pct = 100.0 * (1.0 - composite_clear.mean())
+        print(
+            f"Cloud pixels reduced from {before_cloud_pct:.0f}% → {after_cloud_pct:.0f}%"
+        )
+
+        # Write to GeoTIFF (fill any remaining NaN with 0)
+        composite_filled = composite.fillna(0).values.astype(
+            np.float32
+        )  # (bands, y, x)
+
+        out_profile = profile.copy()
+        out_profile.update(
+            count=composite_filled.shape[0],
+            dtype=composite_filled.dtype,
+            driver="GTiff",
+            transform=transform,
+            crs=crs,
+        )
+
+        with rasterio.open(output_path, "w", **out_profile) as dst:
+            dst.write(composite_filled)
+
+        print(f"Saved to {output_path}")
+    finally:
+        # Cleanup temp files
+        for p in scene_paths:
+            if p.exists():
+                p.unlink()
+        if tmp_dir.exists():
+            tmp_dir.rmdir()
+
     return output_path

@@ -20,7 +20,7 @@ class PatchDataset(Dataset):
 
         Args:
             patches_dir: Directory containing image_*.npy and mask_*.npy files.
-            augment: If True, apply random horizontal flips.
+            augment: If True, apply random geometric and photometric augmentations.
             image_files: Optional list of specific image files to use. If None,
                 all image_*.npy files in the directory are used.
         """
@@ -48,10 +48,55 @@ class PatchDataset(Dataset):
         image = np.load(image_path).astype(np.float32)  # (C, H, W)
         mask = np.load(mask_path).astype(np.float32)  # (H, W)
 
-        if self.augment and np.random.rand() > 0.5:
-            image = np.flip(image, axis=2).copy()
-            mask = np.flip(mask, axis=1).copy()
+        if self.augment:
+            image, mask = _augment(image, mask)
 
         image_t = torch.from_numpy(image)
         mask_t = torch.from_numpy(mask).unsqueeze(0)  # (1, H, W)
         return image_t, mask_t
+
+
+def _augment(image: np.ndarray, mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Apply random geometric augmentations to image and mask.
+
+    Args:
+        image: Array of shape (C, H, W).
+        mask: Array of shape (H, W).
+
+    Returns:
+        Augmented image and mask.
+    """
+    # Horizontal flip
+    if np.random.rand() > 0.5:
+        image = np.flip(image, axis=2).copy()
+        mask = np.flip(mask, axis=1).copy()
+
+    # Vertical flip
+    if np.random.rand() > 0.5:
+        image = np.flip(image, axis=1).copy()
+        mask = np.flip(mask, axis=0).copy()
+
+    # Random 90-degree rotation (0, 1, 2, or 3 times)
+    k = np.random.randint(0, 4)
+    if k > 0:
+        image = np.rot90(image, k=k, axes=(1, 2)).copy()
+        mask = np.rot90(mask, k=k, axes=(0, 1)).copy()
+
+    # Transpose (swap x and y axes)
+    if np.random.rand() > 0.5:
+        image = image.transpose(0, 2, 1).copy()
+        mask = mask.T.copy()
+
+    # Additive Gaussian noise (photometric)
+    if np.random.rand() > 0.5:
+        noise = np.random.normal(0, 50, size=image.shape).astype(np.float32)
+        image = image + noise
+        image = np.clip(image, 0, 65535)
+
+    # Random brightness scaling
+    if np.random.rand() > 0.5:
+        scale = np.random.uniform(0.9, 1.1)
+        image = image * scale
+        image = np.clip(image, 0, 65535)
+
+    return image, mask

@@ -175,6 +175,7 @@ def download_scene(
     bands: list[str] | None = None,
     resolution: int = 10,
     bbox: tuple[float, float, float, float] | None = None,
+    time_range: dict[str, str] | None = None,
 ) -> Path:
     """Download a single scene via Sentinel Hub Process API.
 
@@ -188,6 +189,9 @@ def download_scene(
         bands: List of band names to retrieve. Defaults to RGB + NIR + SWIR.
         resolution: Target spatial resolution in meters.
         bbox: Bounding box to download. Defaults to the item's full footprint.
+        time_range: Optional explicit ``{"from": "...", "to": "..."}``
+            time range for the Process API request. When ``None``, a ±1 day
+            window around the item's acquisition datetime is used.
 
     Returns:
         Path to the saved GeoTIFF.
@@ -217,10 +221,14 @@ def download_scene(
     if not datetime_str:
         raise ValueError("STAC item missing datetime")
 
-    # Build a ±1-day time range around the acquisition
-    dt = datetime.fromisoformat(datetime_str.replace("Z", "+00:00"))
-    dt_from = (dt - timedelta(days=1)).isoformat().replace("+00:00", "Z")
-    dt_to = (dt + timedelta(days=1)).isoformat().replace("+00:00", "Z")
+    if time_range is not None:
+        dt_from = time_range["from"]
+        dt_to = time_range["to"]
+    else:
+        # Build a ±1-day time range around the acquisition
+        dt = datetime.fromisoformat(datetime_str.replace("Z", "+00:00"))
+        dt_from = (dt - timedelta(days=1)).isoformat().replace("+00:00", "Z")
+        dt_to = (dt + timedelta(days=1)).isoformat().replace("+00:00", "Z")
 
     width_px, height_px = _bbox_size_pixels(bbox, resolution)
 
