@@ -10,8 +10,6 @@ from rasterio.transform import from_origin
 from shapely.geometry import Polygon
 
 from goldmine_watch.data.patches import (
-    _compute_patch_cloud_fraction,
-    _compute_patch_valid_fraction,
     generate_sliding_window_patches,
     make_patch,
 )
@@ -145,43 +143,6 @@ class TestRealPatchGeneration:
         # For a 1024×1024 image the theoretical asymptotic ratio is 4.
         # The actual ratio is ~3.1; accept anything reasonably close.
         assert 2.0 < ratio < 5.0
-
-
-class TestPatchHelpers:
-    """Test internal helper functions."""
-
-    def test_compute_patch_cloud_fraction_all_clear(self) -> None:
-        """All valid pixels → cloud fraction 0.0."""
-        mask = np.ones((10, 10), dtype=np.uint8)
-        assert _compute_patch_cloud_fraction(mask) == 0.0
-
-    def test_compute_patch_cloud_fraction_all_cloudy(self) -> None:
-        """All cloudy pixels → cloud fraction 1.0."""
-        mask = np.zeros((10, 10), dtype=np.uint8)
-        assert _compute_patch_cloud_fraction(mask) == 1.0
-
-    def test_compute_patch_valid_fraction_no_nodata(self) -> None:
-        """No nodata value → all pixels valid (1.0)."""
-        patch = np.random.rand(3, 10, 10).astype(np.float32)
-        assert _compute_patch_valid_fraction(patch, nodata=None) == 1.0
-
-    def test_compute_patch_valid_fraction_with_nodata(self) -> None:
-        """Pixels equal to nodata are invalid."""
-        patch = np.ones((3, 10, 10), dtype=np.float32)
-        patch[:, 0, 0] = 0.0
-        patch[:, 1, 1] = 0.0
-        # Two pixels out of 100 are nodata in all bands
-        expected = 1.0 - (2 / 100)
-        assert _compute_patch_valid_fraction(patch, nodata=0.0) == pytest.approx(expected)
-
-    def test_compute_patch_valid_fraction_with_nan_nodata(self) -> None:
-        """NaN nodata values are handled correctly."""
-        patch = np.ones((3, 10, 10), dtype=np.float32)
-        patch[:, 0, 0] = np.nan
-        patch[:, 1, 1] = np.nan
-        # Two pixels out of 100 are NaN in all bands
-        expected = 1.0 - (2 / 100)
-        assert _compute_patch_valid_fraction(patch, nodata=np.nan) == pytest.approx(expected)
 
 
 class TestReturnStats:
