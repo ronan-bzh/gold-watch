@@ -11,8 +11,8 @@ import pytest
 import torch
 
 from goldmine_watch.data.patches import generate_sliding_window_patches
-from goldmine_watch.training.train import train_patches
 from goldmine_watch.models.unet import get_model
+from goldmine_watch.training.train import train_patches
 
 TARGET_CRS = "EPSG:2972"
 
@@ -44,11 +44,12 @@ class TestFeature4TrainingFlow:
             batch_size=2,
             lr=0.001,
             device="cpu",
+            output_dir=output_dir,
         )
 
-        # train_patches saves checkpoints to models/ by default
-        assert (Path("models") / "epoch_001.pth").exists()
-        assert (Path("models") / "epoch_002.pth").exists()
+        assert (output_dir / "epoch_001.pth").exists()
+        assert (output_dir / "epoch_002.pth").exists()
+        assert (output_dir / "best_model.pth").exists()
 
     def test_checkpoint_loads_and_predicts(
         self,
@@ -67,15 +68,17 @@ class TestFeature4TrainingFlow:
             output_dir=patches_dir,
         )
 
+        output_dir = tmp_path / "models"
         train_patches(
             patches_dir=patches_dir,
             epochs=1,
             batch_size=2,
             lr=0.001,
             device="cpu",
+            output_dir=output_dir,
         )
 
-        ckpt_path = Path("models") / "epoch_001.pth"
+        ckpt_path = output_dir / "epoch_001.pth"
         assert ckpt_path.exists()
 
         # Load and verify model can forward a patch
@@ -108,19 +111,21 @@ class TestFeature4TrainingFlow:
             output_dir=patches_dir,
         )
 
+        output_dir = tmp_path / "models"
         train_patches(
             patches_dir=patches_dir,
             epochs=2,
             batch_size=2,
             lr=0.001,
             device="cpu",
+            output_dir=output_dir,
         )
 
         captured = capsys.readouterr()
-        lines = [line for line in captured.out.split("\n") if "Loss:" in line]
+        lines = [line for line in captured.out.split("\n") if "Train Loss:" in line]
         assert len(lines) == 2
-        loss_1 = float(lines[0].split("Loss:")[1].strip())
-        loss_2 = float(lines[1].split("Loss:")[1].strip())
+        loss_1 = float(lines[0].split("Train Loss:")[1].split("|")[0].strip())
+        loss_2 = float(lines[1].split("Train Loss:")[1].split("|")[0].strip())
         # Loss should not explode; allow small tolerance for stochasticity
         assert loss_2 < loss_1 * 1.5
 
@@ -146,14 +151,16 @@ class TestFeature4TrainingFlow:
             output_dir=patches_dir,
         )
 
+        output_dir = tmp_path / "models"
         train_patches(
             patches_dir=patches_dir,
             epochs=1,
             batch_size=2,
             device="cpu",
+            output_dir=output_dir,
         )
 
-        assert (Path("models") / "epoch_001.pth").exists()
+        assert (output_dir / "epoch_001.pth").exists()
 
     def test_training_on_empty_patches_raises(
         self, tmp_path: Path
@@ -163,7 +170,9 @@ class TestFeature4TrainingFlow:
         empty_dir.mkdir()
 
         with pytest.raises(ValueError, match=r"No image_\*\.npy files found"):
-            train_patches(patches_dir=empty_dir, epochs=1, device="cpu")
+            train_patches(
+                patches_dir=empty_dir, epochs=1, device="cpu", output_dir=tmp_path / "models"
+            )
 
     def test_different_batch_sizes_train_successfully(
         self,
@@ -183,10 +192,12 @@ class TestFeature4TrainingFlow:
         )
 
         for bs in (1, 4):
+            output_dir = tmp_path / f"models_bs{bs}"
             train_patches(
                 patches_dir=patches_dir,
                 epochs=1,
                 batch_size=bs,
                 device="cpu",
+                output_dir=output_dir,
             )
-            assert (Path("models") / "epoch_001.pth").exists()
+            assert (output_dir / "epoch_001.pth").exists()

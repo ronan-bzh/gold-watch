@@ -10,17 +10,30 @@ from torch.utils.data import Dataset
 class PatchDataset(Dataset):
     """Dataset that loads image/mask .npy pairs from a directory."""
 
-    def __init__(self, patches_dir: str | Path, augment: bool = True) -> None:
+    def __init__(
+        self,
+        patches_dir: str | Path,
+        augment: bool = True,
+        image_files: list[Path] | None = None,
+    ) -> None:
         """Initialize the dataset.
 
         Args:
             patches_dir: Directory containing image_*.npy and mask_*.npy files.
             augment: If True, apply random horizontal flips.
+            image_files: Optional list of specific image files to use. If None,
+                all image_*.npy files in the directory are used.
         """
         self.patches_dir = Path(patches_dir)
         self.augment = augment
-        self.image_files = sorted(self.patches_dir.glob("image_*.npy"))
+        self.image_files = (
+            sorted(image_files)
+            if image_files is not None
+            else sorted(self.patches_dir.glob("image_*.npy"))
+        )
         if not self.image_files:
+            if image_files is not None:
+                raise ValueError("image_files list is empty")
             raise ValueError(f"No image_*.npy files found in {patches_dir}")
 
     def __len__(self) -> int:

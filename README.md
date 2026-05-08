@@ -75,12 +75,52 @@ AI-assisted geospatial detection of potential gold mining surfaces in French Gui
    python scripts/demo_feature4_train.py \
      outputs/patches \
      --epochs 30 \
-     --device cuda
+     --batch-size 4 \
+     --lr 0.001 \
+     --device cuda \
+     --checkpoint-dir models \
+     --output-dir outputs/training
    ```
-   Outputs:
+
+   **Arguments:**
+   - `patches_dir` — Directory containing `image_*.npy` and `mask_*.npy` patches
+   - `--epochs` — Number of training epochs (default: 30)
+   - `--batch-size` — Batch size (default: 4)
+   - `--lr` — Learning rate (default: 0.001)
+   - `--device` — `cpu` or `cuda` (default: cpu)
+   - `--checkpoint-dir` — Where to save model checkpoints (default: `models/`)
+   - `--output-dir` — Where to save metric plots (default: `outputs/training/`)
+
+   **What happens during training:**
+   - Patches are automatically split into train/val using a **spatial** split (different geographic quadrants) to prevent data leakage
+   - After each epoch, the model is evaluated on the validation set
+   - Console output shows train loss, validation IoU, and validation F1:
+     ```
+     Epoch 01/30 — Train Loss: 0.5424 | Val IoU: 0.12 | Val F1: 0.21
+     Epoch 02/30 — Train Loss: 0.3891 | Val IoU: 0.18 | Val F1: 0.30
+     ...
+     Best model saved at epoch 27 (Val IoU: 0.61)
+     ```
+
+   **Outputs:**
    - `outputs/training/loss_curve.png` — Train/val loss over epochs
-   - `outputs/training/iou_curve.png` — Val IoU over epochs
-   - `models/best_model.pth` — Checkpoint with highest val IoU
+   - `outputs/training/iou_curve.png` — Validation IoU over epochs
+   - `models/epoch_001.pth` ... `models/epoch_030.pth` — Per-epoch checkpoints
+   - `models/best_model.pth` — Checkpoint with the highest validation IoU
+
+   **Training from Python:**
+   ```python
+   from goldmine_watch.training.train import train_patches
+
+   history = train_patches(
+       patches_dir="outputs/patches",
+       epochs=30,
+       batch_size=4,
+       device="cuda",
+       output_dir="models",
+   )
+   print(history["val_iou"])  # List of per-epoch IoU scores
+   ```
 
 8. **Run inference on a full scene:**
    ```bash
