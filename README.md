@@ -60,19 +60,91 @@ AI-assisted geospatial detection of potential gold mining surfaces in French Gui
    - `outputs/demo/cloud_mask.png` — Black = cloud, white = clear
    - `outputs/demo/cloud_masked.png` — RGB with clouds highlighted in red
 
-6. **Run the full pipeline:**
+6. **Generate training patches:**
    ```bash
-   make data
-   make train
-   make evaluate
-   make predict
-   make export
+   python scripts/demo_feature3_patches.py \
+     data/raw/sentinel2_scene.tif \
+     data/french_guiana_mines_2023.geojson \
+     --output-dir outputs/patches \
+     --patch-size 256 \
+     --stride 256
    ```
 
-7. **Run tests:**
+7. **Train the model on patches:**
    ```bash
-   make test
+   python scripts/demo_feature4_train.py \
+     outputs/patches \
+     --epochs 30 \
+     --device cuda
    ```
+   Outputs:
+   - `outputs/training/loss_curve.png` — Train/val loss over epochs
+   - `outputs/training/iou_curve.png` — Val IoU over epochs
+   - `models/best_model.pth` — Checkpoint with highest val IoU
+
+8. **Run inference on a full scene:**
+   ```bash
+   python scripts/demo_feature5_inference.py \
+     data/raw/sentinel2_scene.tif \
+     models/best_model.pth \
+     data/french_guiana_mines_2023.geojson \
+     --threshold 0.5
+   ```
+   Outputs:
+   - `outputs/demo/inference_comparison.png` — 3-panel figure (RGB, ground truth, prediction)
+   - `outputs/demo/inference_metrics.json` — Pixel-wise IoU, F1, precision, recall
+
+9. **Build a temporal composite (optional):**
+   ```bash
+   python scripts/demo_feature6_composite.py \
+     --bbox "-54.1,5.3,-53.9,5.5" \
+     --start 2023-01-01 \
+     --end 2023-03-31 \
+     --out data/raw/composite.tif
+   ```
+   Outputs:
+   - `data/raw/composite.tif` — Median composite
+   - `outputs/demo/composite_comparison.png` — Side-by-side single scene vs composite
+
+10. **Run the rule-based baseline (sanity check):**
+    ```bash
+    python scripts/demo_feature8_baseline.py \
+      data/raw/sentinel2_scene.tif \
+      --ndvi-threshold 0.2 \
+      --bsi-threshold 0.1
+    ```
+    Outputs:
+    - `outputs/demo/baseline_mask.png` — Binary mask from rules
+    - `outputs/demo/baseline_comparison.png` — AI vs rules vs ground truth
+    - `outputs/demo/baseline_polygons.gpkg` — Rule-based polygons
+
+11. **Export polygons and QGIS project:**
+    ```bash
+    python scripts/demo_feature7_export.py \
+      data/raw/sentinel2_scene.tif \
+      outputs/real_prediction.tif \
+      models/best_model.pth \
+      --threshold 0.5 \
+      --min-area-m2 500
+    ```
+    Outputs:
+    - `outputs/real_polygons.gpkg` — Vector polygons with attributes
+    - `outputs/real_polygons.csv` — Tabular export
+    - `outputs/detection_project.qgz` — QGIS project (open with `qgis outputs/detection_project.qgz`)
+
+12. **Run the full pipeline:**
+    ```bash
+    make data
+    make train
+    make evaluate
+    make predict
+    make export
+    ```
+
+13. **Run tests:**
+    ```bash
+    make test
+    ```
 
 ## Project Structure
 
@@ -97,6 +169,22 @@ All pipeline parameters are centralized in `configs/mvp.yaml`. Copy and modify t
 - Model architecture and training hyperparameters
 - Inference parameters (sliding window, threshold)
 - Export settings
+
+## Feature Demos
+
+Each feature has a standalone demo script. Run them in order:
+
+| Feature | Command | Description |
+|---|---|---|
+| 0 — Download | `python scripts/demo_feature0_download.py ...` | Download Sentinel-2 scenes from Copernicus Data Space |
+| 1 — Validate | `python scripts/demo_feature1_validate.py ...` | Validate image metadata and label overlap |
+| 2 — Cloud mask | `python scripts/demo_feature2_cloud_mask.py ...` | Visualize cloud masking using the SCL band |
+| 3 — Patches | `python scripts/demo_feature3_patches.py ...` | Generate training patches from image + labels |
+| 4 — Train | `python scripts/demo_feature4_train.py ...` | Train model with metrics and spatial validation |
+| 5 — Inference | `python scripts/demo_feature5_inference.py ...` | Run full-image inference and evaluate |
+| 6 — Composite | `python scripts/demo_feature6_composite.py ...` | Build cloud-free median composite |
+| 7 — Export | `python scripts/demo_feature7_export.py ...` | Extract polygons and export QGIS project |
+| 8 — Baseline | `python scripts/demo_feature8_baseline.py ...` | Rule-based detection sanity check |
 
 ## Pipeline Stages
 

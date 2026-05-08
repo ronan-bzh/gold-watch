@@ -7,20 +7,26 @@ Usage:
         --num-display 9
 """
 
+from __future__ import annotations
+
 import argparse
 import random
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from goldmine_watch.data.patches import generate_sliding_window_patches
 
+if TYPE_CHECKING:
+    import matplotlib.figure
+
 
 def _create_patch_grid(
     patches: list[tuple[np.ndarray, np.ndarray]],
     num_display: int = 9,
-) -> object:
+) -> matplotlib.figure.Figure:
     """Create a 3×3 grid of patches with mask overlay in red.
 
     Returns:
