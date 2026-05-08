@@ -8,7 +8,7 @@ from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
-import pytest
+import pandas as pd
 import rasterio
 from rasterio.transform import from_origin
 
@@ -113,7 +113,7 @@ class TestFeature7PostprocessFlow:
         gdf.to_csv(csv_path, index=False)
 
         assert csv_path.exists()
-        df = gpd.pd.read_csv(csv_path)
+        df = pd.read_csv(csv_path)
         assert len(df) == len(gdf)
 
     def test_empty_raster_produces_empty_geopackage(
