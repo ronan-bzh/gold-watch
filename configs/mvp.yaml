@@ -161,6 +161,10 @@ postprocess:
   min_confidence: 0.3
   output_format: "geojson"
 
+mosaic:
+  output_path: "outputs/phase2/mosaic.tif"
+  method: "mean"
+
 baseline:
   # Spectral rule-based baseline thresholds (Feature 8)
   ndvi_threshold: 0.2

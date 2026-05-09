@@ -12,4 +12,5 @@ Modules:
     mine_clusterer: Group mining polygons by Sentinel-2 tile ID.
     build_training_dataset: Build complete multi-scene training dataset.
     square_postprocess: Convert probability rasters to square bounding boxes.
+    mosaic: Merge multiple per-tile rasters into a single seamless mosaic.
 """
