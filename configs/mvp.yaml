@@ -126,6 +126,12 @@ inference:
   # Minimum connected component area in pixels
   min_area_pixels: 10
 
+cache:
+  tiles_dir: "data/cache/tiles"
+  predictions_dir: "data/cache/predictions"
+  # Max cache size in GB before warnings
+  max_size_gb: 10
+
 baseline:
   # Spectral rule-based baseline thresholds (Feature 8)
   ndvi_threshold: 0.2

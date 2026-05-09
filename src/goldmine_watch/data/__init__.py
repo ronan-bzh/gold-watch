@@ -8,4 +8,5 @@ Modules:
     patches: Generate georeferenced image patches and binary masks.
     cloud_mask: Load SCL band and create cloud masks.
     dataset: PyTorch Dataset for loading saved patches.
+    tile_cache: Cache-first tile manager for training and inference.
 """
