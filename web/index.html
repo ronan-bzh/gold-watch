@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GoldMine Watch — French Guiana</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="map"></div>
+  <div id="controls">
+    <h3>GoldMine Watch</h3>
+    <div class="control-group">
+      <label>Confidence threshold: <span id="threshold-value">20</span>%</label>
+      <input type="range" id="threshold" min="0" max="100" value="20">
+    </div>
+    <div class="control-group">
+      <label><input type="checkbox" id="show-labels" checked> Show original labels</label>
+    </div>
+    <div class="control-group">
+      <label><input type="checkbox" id="show-detections" checked> Show detections</label>
+    </div>
+    <div class="control-group">
+      <label><input type="checkbox" id="show-satellite" checked> Show satellite imagery</label>
+    </div>
+    <div id="status" class="status"></div>
+  </div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
