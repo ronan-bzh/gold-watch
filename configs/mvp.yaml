@@ -73,6 +73,14 @@ dataset:
   min_valid_fraction: 0.8
   # Reject patches with cloud fraction above this threshold
   max_cloud_fraction: 0.2
+  # Feature 11: multi-scene training dataset parameters
+  source_mines: "data/french_guiana_mines.geojson"
+  # Uses geospatial.patch_size for patch dimensions
+  # Uses paths.data_splits for output directory
+  background_per_tile: 100
+  train_val_ratio: [0.8, 0.2]
+  # Spatial split: ensure train and val come from different tiles
+  spatial_split: true
 
 model:
   # Architecture
