@@ -96,9 +96,9 @@ model:
 
 training:
   # Hardware
-  device: "cuda"
+  device: "auto"
   # Hyperparameters
-  batch_size: 16
+  batch_size: 8
   num_workers: 4
   learning_rate: 0.001
   epochs: 50
@@ -122,6 +122,16 @@ training:
     vertical_flip: true
     random_rotate90: true
     random_brightness_contrast: true
+  # Class balancing for imbalanced mining data
+  class_balance:
+    enabled: true
+    max_pos_weight: 100.0
+  # Learning rate scheduler
+  scheduler:
+    type: "ReduceLROnPlateau"
+    mode: "max"
+    factor: 0.5
+    patience: 5
 
 inference:
   # Sliding window parameters
