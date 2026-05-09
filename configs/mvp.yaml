@@ -154,6 +154,13 @@ cache:
   # Max cache size in GB before warnings
   max_size_gb: 10
 
+postprocess:
+  mode: "square"  # "square" or "irregular"
+  grid_size_m: 128.0
+  threshold: 0.2
+  min_confidence: 0.3
+  output_format: "geojson"
+
 baseline:
   # Spectral rule-based baseline thresholds (Feature 8)
   ndvi_threshold: 0.2

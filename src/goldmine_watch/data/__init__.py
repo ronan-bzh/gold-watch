@@ -11,4 +11,5 @@ Modules:
     tile_cache: Cache-first tile manager for training and inference.
     mine_clusterer: Group mining polygons by Sentinel-2 tile ID.
     build_training_dataset: Build complete multi-scene training dataset.
+    square_postprocess: Convert probability rasters to square bounding boxes.
 """
