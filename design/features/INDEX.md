@@ -21,6 +21,16 @@ This document indexes all feature specifications for moving from the synthetic d
 | **6** | [Temporal Compositing](FEATURE_06_temporal_compositing.md) | Download multiple scenes, build cloud-free median composite | 3 tests | `demo_feature6_composite.py` | 3–4h |
 | **7** | [Post-Processing, Polygonization & QGIS Export](FEATURE_07_postprocess_export.md) | Threshold predictions, extract polygons, export QGIS project | 5 tests | `demo_feature7_export.py` | 3–4h |
 | **8** | [Spectral Rule-Based Baseline](FEATURE_08_baseline_rules.md) | Simple NDVI+BSI rules for comparison against AI | 4 tests | `demo_feature8_baseline.py` | 2–3h |
+| **9** | [Unified Tile Cache](FEATURE_09_tile_cache.md) | Cache-first tile manager for training + inference | 6 tests | `demo_feature9_tile_cache.py` | 2–3h |
+| **10** | [Mine Clusterer](FEATURE_10_mine_clusterer.md) | Group all 1,189 mines by Sentinel-2 tile | 4 tests | `demo_feature10_clusterer.py` | 1–2h |
+| **11** | [Multi-Scene Training Dataset](FEATURE_11_multi_scene_dataset.md) | Download all tiles, extract patches from all mines | 5 tests | `demo_feature11_dataset.py` | 4–6h |
+| **12** | [Full Territory Training](FEATURE_12_full_training.md) | Train model on all 1,189 mines | 5 tests | `demo_feature12_train.py` | 2–3h |
+| **13** | [Batch Inference Engine](FEATURE_13_batch_inference.md) | Run inference on all tiles covering French Guiana | 4 tests | `demo_feature13_inference.py` | 3–4h |
+| **14** | [Square Post-Processing](FEATURE_14_square_postprocess.md) | Convert heatmaps to square bounding boxes | 4 tests | `demo_feature14_square.py` | 1–2h |
+| **15** | [Mosaic Builder](FEATURE_15_mosaic_builder.md) | Merge per-tile predictions into one mosaic | 3 tests | `demo_feature15_mosaic.py` | 1–2h |
+| **16** | [Web Map](FEATURE_16_web_map.md) | Leaflet map with OSM, Sentinel-2, and detections | 5 tests | `demo_feature16_web.py` | 2–3h |
+| **17** | [Docker Deployment](FEATURE_17_docker_deploy.md) | Containerize web app for production | 4 tests | `demo_feature17_docker.py` | 1–2h |
+| **18** | [QGIS Export — Full Territory](FEATURE_18_qgis_export.md) | Export full territory as QGIS project | 3 tests | `demo_feature18_qgis.py` | 1h |
 
 ---
 

@@ -2,6 +2,30 @@
 
 AI-assisted geospatial detection of potential gold mining surfaces in French Guiana from Sentinel-2 satellite imagery.
 
+## Authentication Setup (Required)
+
+All demos and tests that download real Sentinel-2 data require Copernicus Data Space credentials.
+
+1. **Create a `.env` file** in the project root:
+   ```bash
+   export COPERNICUS_CLIENT_ID="your-client-id"
+   export COPERNICUS_CLIENT_SECRET="your-client-secret"
+   ```
+
+2. **Load credentials before any demo or test:**
+   ```bash
+   export $(cat .env | xargs)
+   ```
+
+   > **Note:** The `.env` file is already in `.gitignore` to prevent accidental commits of secrets.
+
+3. **Get your credentials:**
+   - Register at [https://dataspace.copernicus.eu](https://dataspace.copernicus.eu)
+   - Go to **User Settings → OAuth Clients → Create New**
+   - Copy the generated **Client ID** and **Client Secret**
+
+---
+
 ## Quick Start
 
 1. **Install dependencies:**
@@ -287,6 +311,21 @@ Each feature has a standalone demo script. Run them in order:
 | 7 — Export | `python scripts/demo_feature7_export.py ...` | Extract polygons and export QGIS project |
 | 8 — Baseline | `python scripts/demo_feature8_baseline.py ...` | Rule-based detection sanity check |
 
+### Phase 2 — Full Territory Pipeline
+
+| Feature | Command | Description |
+|---|---|---|
+| 9 — Tile Cache | `python scripts/demo_feature9_tile_cache.py ...` | Cache-first tile manager |
+| 10 — Clusterer | `python scripts/demo_feature10_clusterer.py` | Group mines by Sentinel-2 tile |
+| 11 — Dataset | `python scripts/demo_feature11_dataset.py ...` | Build dataset from all 1,189 mines |
+| 12 — Training | `python scripts/demo_feature12_train.py ...` | Train on full territory |
+| 13 — Inference | `python scripts/demo_feature13_inference.py ...` | Batch inference on all tiles |
+| 14 — Square | `python scripts/demo_feature14_square.py ...` | Square bounding box post-processing |
+| 15 — Mosaic | `python scripts/demo_feature15_mosaic.py ...` | Merge tiles into mosaic |
+| 16 — Web Map | `python scripts/demo_feature16_web.py` | Launch Leaflet web map |
+| 17 — Docker | `docker build -t goldmine-watch ./web` | Containerize web app |
+| 18 — QGIS | `python scripts/demo_feature18_qgis.py ...` | Export full territory QGIS project |
+
 ## Pipeline Stages
 
 | Stage | Command | Description |
@@ -301,6 +340,63 @@ Each feature has a standalone demo script. Run them in order:
 | Predict | `make predict` | Run inference on a pilot area |
 | Export | `make export` | Export predictions to GeoTIFF and GeoPackage |
 | Test | `make test` | Run the full test suite |
+
+## Testing
+
+### Unit Tests
+
+Unit tests mock external dependencies (Copernicus API, downloads) and run quickly:
+
+```bash
+pytest tests/unit -v --tb=short
+```
+
+### Functional Tests
+
+Functional tests verify end-to-end workflows. **Some require real data and valid `.env` credentials:**
+
+```bash
+# Source credentials first
+export $(cat .env | xargs)
+
+# Run all functional tests
+pytest tests/functional -v --tb=short
+
+# Run tests that DON'T require network (mocked)
+pytest tests/functional -v -m "not real_data" --tb=short
+
+# Run tests that REQUIRE network and real credentials
+pytest tests/functional -v -m "real_data" --tb=short
+```
+
+### Real Data Tests
+
+Tests marked with `@pytest.mark.real_data` require:
+- Valid `.env` credentials loaded
+- Internet access
+- Sufficient disk space (~2-4 GB for tile downloads)
+
+```bash
+# Example: test tile cache with real download
+export $(cat .env | xargs)
+pytest tests/functional/test_feature_9_tile_cache.py -v
+```
+
+### End-to-End Demo Test
+
+The complete pipeline on real data:
+
+```bash
+# 1. Ensure credentials are loaded
+export $(cat .env | xargs)
+
+# 2. Run the full Phase 2 end-to-end demo
+python scripts/demo_end_to_end_real.py
+
+# 3. Check outputs
+ls outputs/demo_real/
+# Expected: prediction_real.tif, polygons_real.gpkg, end_to_end_real.png
+```
 
 ## Experiment Tracking
 
