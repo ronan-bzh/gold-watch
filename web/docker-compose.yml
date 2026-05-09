@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  goldmine-watch:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data:ro
+    restart: unless-stopped

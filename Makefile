@@ -1,7 +1,7 @@
 # GoldMine Watch — Pipeline Orchestration
 # Run `make help` to see available targets.
 
-.PHONY: help setup install test lint format clean
+.PHONY: help setup install test lint format clean docker-build docker-run docker-compose-up
 
 PYTHON := python3
 PIP := $(PYTHON) -m pip
@@ -15,6 +15,11 @@ help:
 	@echo "  make lint       Run ruff and mypy"
 	@echo "  make format     Run black and ruff --fix"
 	@echo "  make clean      Remove processed artifacts and outputs"
+	@echo ""
+	@echo "Docker deployment:"
+	@echo "  make docker-build       Build the Docker image"
+	@echo "  make docker-run         Run the container on port 8000"
+	@echo "  make docker-compose-up  Start via Docker Compose"
 	@echo ""
 	@echo "Pipeline stages (run manually):"
 	@echo "  python scripts/plot_labels.py data/raw/labels.gpkg"
@@ -51,3 +56,12 @@ clean:
 	rm -rf .pytest_cache
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
+
+docker-build:
+	docker build -t goldmine-watch ./web
+
+docker-run:
+	docker run -p 8000:8000 goldmine-watch
+
+docker-compose-up:
+	docker compose -f web/docker-compose.yml up -d
