@@ -9,4 +9,5 @@ Modules:
     cloud_mask: Load SCL band and create cloud masks.
     dataset: PyTorch Dataset for loading saved patches.
     tile_cache: Cache-first tile manager for training and inference.
+    mine_clusterer: Group mining polygons by Sentinel-2 tile ID.
 """
