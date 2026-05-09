@@ -44,7 +44,10 @@ def predict_big_image(
 
     device_obj = torch.device(device)
     model = get_model(in_channels=in_channels).to(device_obj)
-    model.load_state_dict(torch.load(model_path, map_location=device_obj, weights_only=True))
+    checkpoint = torch.load(model_path, map_location=device_obj, weights_only=True)
+    # Handle both raw state_dicts and wrapped checkpoints from train_phase2
+    state_dict = checkpoint.get("model_state_dict", checkpoint)
+    model.load_state_dict(state_dict)
     model.eval()
 
     with rasterio.open(image_path) as src:

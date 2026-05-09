@@ -134,15 +134,19 @@ training:
     patience: 5
 
 inference:
+  # Model checkpoint for inference
+  model_path: "models/phase2_best.pth"
   # Sliding window parameters
   tile_size: 256
   overlap: 64
   # Blending method for overlapping regions: "average" or "gaussian"
   blend_method: "average"
   # Probability threshold for binary mask
-  threshold: 0.5
+  threshold: 0.2
   # Minimum connected component area in pixels
   min_area_pixels: 10
+  # Output directory for batch predictions
+  output_dir: "outputs/phase2"
 
 cache:
   tiles_dir: "data/cache/tiles"
