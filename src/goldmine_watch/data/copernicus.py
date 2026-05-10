@@ -284,10 +284,11 @@ def download_scene(
     if response.status_code == 400:
         # Log the actual error response for debugging
         error_text = response.text[:2000] if response.text else "(empty body)"
-        raise RuntimeError(
+        raise requests.HTTPError(
             f"Copernicus Process API returned 400. "
             f"Request size: {width_px}x{height_px}px ({len(bands)} bands). "
-            f"Error: {error_text}"
+            f"Error: {error_text}",
+            response=response,
         )
     response.raise_for_status()
 
