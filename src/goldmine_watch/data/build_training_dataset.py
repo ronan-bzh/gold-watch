@@ -225,6 +225,44 @@ def _save_patches(
     return idx
 
 
+def _compute_mine_bbox(
+    mines_gdf: gpd.GeoDataFrame, padding_degrees: float = 0.05
+) -> tuple[float, float, float, float]:
+    """Compute a padded bounding box around mining polygons in WGS84.
+
+    Using a mine-centered bbox instead of the full Sentinel-2 tile bbox
+    dramatically reduces the download size and avoids Copernicus Process
+    API 400 errors for oversized requests.
+
+    Args:
+        mines_gdf: GeoDataFrame with mine geometries (any CRS).
+        padding_degrees: Padding in degrees around the mine extents.
+            Default 0.05 deg ≈ 5.5 km at the equator.
+
+    Returns:
+        ``(min_lon, min_lat, max_lon, max_lat)`` in EPSG:4326.
+    """
+    # Ensure we're working in WGS84 for the bbox
+    if mines_gdf.crs is not None and not mines_gdf.crs.to_string() == "EPSG:4326":
+        gdf_wgs84 = mines_gdf.to_crs("EPSG:4326")
+    else:
+        gdf_wgs84 = mines_gdf
+
+    bounds = gdf_wgs84.total_bounds  # (minx, miny, maxx, maxy)
+    min_lon = bounds[0] - padding_degrees
+    min_lat = bounds[1] - padding_degrees
+    max_lon = bounds[2] + padding_degrees
+    max_lat = bounds[3] + padding_degrees
+
+    # Clamp to valid WGS84 ranges
+    min_lon = max(-180.0, min_lon)
+    min_lat = max(-90.0, min_lat)
+    max_lon = min(180.0, max_lon)
+    max_lat = min(90.0, max_lat)
+
+    return (min_lon, min_lat, max_lon, max_lat)
+
+
 def build_training_dataset(
     mines_geojson: str = "data/french_guiana_mines.geojson",
     output_dir: str = "data/splits",
@@ -234,6 +272,7 @@ def build_training_dataset(
     train_val_ratio: tuple[float, float] = (0.8, 0.2),
     random_seed: int = 42,
     cache_dir: str = "data/cache/tiles",
+    db_path: str = "data/cache/tiles.db",
 ) -> dict[str, Any]:
     """Build complete training dataset from all mines.
 
@@ -254,6 +293,7 @@ def build_training_dataset(
         train_val_ratio: (train_fraction, val_fraction) tuple.
         random_seed: Seed for reproducible random sampling and splitting.
         cache_dir: Directory for tile cache.
+        db_path: Path to the SQLite tile registry database.
 
     Returns:
         Statistics dictionary with keys:
@@ -289,7 +329,7 @@ def build_training_dataset(
         len(val_tiles),
     )
 
-    cache = TileCache(cache_dir)
+    cache = TileCache(cache_dir, db_path=db_path)
 
     stats_by_tile: dict[str, dict[str, int]] = {}
     train_idx = 0
@@ -299,9 +339,10 @@ def build_training_dataset(
 
     for tile_id in tile_ids:
         tile_mines = clusters[tile_id]
-        bbox = get_tile_bbox(tile_id)
+        # Use mine-centered bbox instead of full tile bbox to keep downloads small
+        bbox = _compute_mine_bbox(tile_mines, padding_degrees=0.05)
 
-        logger.info("[%s] Downloading tile...", tile_id)
+        logger.info("[%s] Downloading tile (mine bbox: %.4f, %.4f, %.4f, %.4f)...", tile_id, *bbox)
         try:
             tile_path = cache.get_tile(
                 tile_id=tile_id,

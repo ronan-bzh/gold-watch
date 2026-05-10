@@ -38,9 +38,10 @@ def _make_geotiff_bytes(
 
 
 def _write_geotiff(path: Path, count: int = 7) -> None:
-    """Write a small valid GeoTIFF to *path*."""
+    """Write a small valid GeoTIFF to *path* inside French Guiana."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    transform = from_origin(0, 0, 10, 10)
+    # WGS84 bounds inside French Guiana (~4.0°N, -53.0°W)
+    transform = from_origin(-53.05, 4.05, 0.001, 0.001)
     data = np.random.randint(0, 1000, size=(count, 64, 64), dtype=np.uint16)
     with rasterio.open(
         path,
@@ -50,7 +51,7 @@ def _write_geotiff(path: Path, count: int = 7) -> None:
         width=64,
         count=count,
         dtype=data.dtype,
-        crs="EPSG:32622",
+        crs="EPSG:4326",
         transform=transform,
     ) as dst:
         dst.write(data)
@@ -102,7 +103,7 @@ class TestTileCache:
             content=_make_geotiff_bytes(count=7),
         )
 
-        cache = TileCache(str(tmp_path / "cache"))
+        cache = TileCache(str(tmp_path / "cache"), db_path=str(tmp_path / "tiles.db"))
         result = cache.get_tile(
             tile_id="T21NZG",
             date_range="2023-10-01/2023-10-31",
@@ -121,7 +122,7 @@ class TestTileCache:
         cached_path = cache_dir / "T21NZG_20231026.tif"
         _write_geotiff(cached_path)
 
-        cache = TileCache(str(cache_dir))
+        cache = TileCache(str(cache_dir), db_path=str(tmp_path / "tiles.db"))
         result = cache.get_tile(
             tile_id="T21NZG",
             date_range="2023-10-01/2023-10-31",
@@ -139,7 +140,7 @@ class TestTileCache:
         _write_geotiff(cache_dir / "T21NZG_20231026.tif")
         _write_geotiff(cache_dir / "T21NZG_20231115.tif")
 
-        cache = TileCache(str(cache_dir))
+        cache = TileCache(str(cache_dir), db_path=str(tmp_path / "tiles.db"))
         tiles = cache.list_cached_tiles()
 
         assert len(tiles) == 2
@@ -154,7 +155,7 @@ class TestTileCache:
         _write_geotiff(path1)
         _write_geotiff(path2)
 
-        cache = TileCache(str(cache_dir))
+        cache = TileCache(str(cache_dir), db_path=str(tmp_path / "tiles.db"))
         size_mb = cache.get_cache_size_mb()
 
         expected_bytes = path1.stat().st_size + path2.stat().st_size
@@ -168,7 +169,7 @@ class TestTileCache:
         _write_geotiff(cache_dir / "tile1.tif")
         _write_geotiff(cache_dir / "tile2.tif")
 
-        cache = TileCache(str(cache_dir))
+        cache = TileCache(str(cache_dir), db_path=str(tmp_path / "tiles.db"))
         assert len(cache.list_cached_tiles()) == 2
 
         cache.clear_cache()

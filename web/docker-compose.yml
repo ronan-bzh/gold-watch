@@ -2,9 +2,23 @@ version: '3.8'
 
 services:
   goldmine-watch:
-    build: .
+    build:
+      context: ..
+      dockerfile: web/Dockerfile
     ports:
       - "8000:8000"
     volumes:
-      - ./data:/app/data:ro
+      # Tiles are read-only (generated outside the container)
+      - ../data/cache/tiles:/app/data/cache/tiles:ro
+      # SQLite DB is persisted on a named volume (created inside Docker)
+      - tiles-db:/app/data/cache/db
+      # Schema is baked into the image, but allow override from host
+      - ../data/schema.sql:/app/data/schema.sql:ro
+    environment:
+      - TILES_DB=/app/data/cache/db/tiles.db
+      - TILES_SCHEMA=/app/data/schema.sql
     restart: unless-stopped
+
+volumes:
+  tiles-db:
+    driver: local

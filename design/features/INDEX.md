@@ -1,6 +1,6 @@
 # GoldMine Watch — Feature Roadmap
 
-**Status:** Milestones 0–11 Complete | **Date:** 2026-05-07
+**Status:** Milestones 0–11 Complete, Feature 19 Spec Ready | **Date:** 2026-05-10
 
 This document indexes all feature specifications for moving from the synthetic demo to real-world deployment. Each feature is self-contained: it has a clear goal, source code to build, tests to verify, a demo to run, and explicit success criteria.
 
@@ -31,6 +31,7 @@ This document indexes all feature specifications for moving from the synthetic d
 | **16** | [Web Map](FEATURE_16_web_map.md) | Leaflet map with OSM, Sentinel-2, and detections | 5 tests | `demo_feature16_web.py` | 2–3h |
 | **17** | [Docker Deployment](FEATURE_17_docker_deploy.md) | Containerize web app for production | 4 tests | `demo_feature17_docker.py` | 1–2h |
 | **18** | [QGIS Export — Full Territory](FEATURE_18_qgis_export.md) | Export full territory as QGIS project | 3 tests | `demo_feature18_qgis.py` | 1h |
+| **19** | [Unified Tile Registry & Dynamic Tile Server](FEATURE_19_tile_registry_server.md) | SQLite tile catalog + FastAPI XYZ server for training, inference, and web | 14 tests | `demo_feature19_tile_server.py` | 4–6h |
 
 ---
 
@@ -108,6 +109,12 @@ Feature 0 (Copernicus Download)
             │       └──► Feature 6 (Compositing) ────────┘
             │
             └──► Feature 8 can run independently on raw image
+
+Feature 9 (Tile Cache) ──► Feature 19 (Tile Registry & Server)
+    │                            │
+    │                            ├──► Training (via registry)
+    │                            ├──► Inference (via registry)
+    │                            └──► Web Map (Feature 16 ──► Feature 19)
 ```
 
 **Key insight:** Feature 6 (Temporal Compositing) is optional. You can train on a single scene if cloud cover is low.
@@ -141,6 +148,7 @@ Feature 0 (Copernicus Download)
 | After Feature 5 | Full-image inference completes, IoU > 0.40 |
 | After Feature 8 | AI IoU > Rule IoU by at least +20% |
 | After Feature 7 | QGIS project opens, polygons are visually plausible |
+| After Feature 19 | SQLite registry indexes all tiles; web map serves XYZ tiles at any zoom; FG boundary enforced |
 
 ---
 
@@ -157,6 +165,7 @@ Feature 0 (Copernicus Download)
 | `scripts/demo_feature6_composite.py` | Download and composite scenes |
 | `scripts/demo_feature7_export.py` | Export polygons + QGIS project |
 | `scripts/demo_feature8_baseline.py` | Rule-based detection baseline |
+| `scripts/demo_feature19_tile_server.py` | Start tile server, test endpoints |
 | `configs/mvp.yaml` | Central configuration (edit before any feature) |
 
 ---

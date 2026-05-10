@@ -9,7 +9,6 @@ const osmLayer = L.tileLayer(
 ).addTo(map);
 
 // Satellite imagery overlay (using ESRI World Imagery as a fallback)
-// In production, replace with your own titiler endpoint or Sentinel-2 COG tiles.
 const satelliteLayer = L.tileLayer(
   'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
   {
@@ -17,6 +16,14 @@ const satelliteLayer = L.tileLayer(
     opacity: 0.7,
   }
 );
+
+// Sentinel-2 overlay via dynamic XYZ tile server
+// Dezoom is automatic — Leaflet requests lower z tiles, server resamples on the fly
+const copernicusLayer = L.tileLayer('/tiles/{z}/{x}/{y}.png', {
+  attribution: 'Sentinel-2 / Copernicus',
+  maxZoom: 14,
+  opacity: 1.0,
+});
 
 // Layer groups
 let detectionsLayer = L.layerGroup().addTo(map);
@@ -28,6 +35,7 @@ const thresholdValue = document.getElementById('threshold-value');
 const showLabelsCheckbox = document.getElementById('show-labels');
 const showDetectionsCheckbox = document.getElementById('show-detections');
 const showSatelliteCheckbox = document.getElementById('show-satellite');
+const showCopernicusCheckbox = document.getElementById('show-copernicus');
 const statusDiv = document.getElementById('status');
 
 let detectionsData = [];
@@ -143,6 +151,12 @@ function updateVisibility() {
   } else {
     if (map.hasLayer(satelliteLayer)) map.removeLayer(satelliteLayer);
   }
+
+  if (showCopernicusCheckbox.checked) {
+    if (!map.hasLayer(copernicusLayer)) map.addLayer(copernicusLayer);
+  } else {
+    if (map.hasLayer(copernicusLayer)) map.removeLayer(copernicusLayer);
+  }
 }
 
 async function loadGeoJSON(path, onSuccess, label) {
@@ -170,6 +184,7 @@ thresholdSlider.addEventListener('input', () => {
 showLabelsCheckbox.addEventListener('change', updateVisibility);
 showDetectionsCheckbox.addEventListener('change', updateVisibility);
 showSatelliteCheckbox.addEventListener('change', updateVisibility);
+showCopernicusCheckbox.addEventListener('change', updateVisibility);
 
 // Load data
 (async function init() {

@@ -17,6 +17,7 @@ from goldmine_watch.data.copernicus import (
     get_access_token,
     search_scenes,
 )
+from goldmine_watch.data.tile_registry import TileRegistry
 
 
 def _require_credentials() -> tuple[str, str]:
@@ -59,16 +60,26 @@ class TileCache:
     The first request for a tile searches the Copernicus STAC catalog,
     downloads the best-matching scene, and caches it. Subsequent requests
     return the cached path immediately.
+
+    All discovered tiles are automatically registered in the SQLite
+    :class:`TileRegistry` so that training, inference, and the web
+    server share a single source of truth.
     """
 
-    def __init__(self, cache_dir: str = "data/cache/tiles"):
-        """Initialize cache directory.
+    def __init__(
+        self,
+        cache_dir: str = "data/cache/tiles",
+        db_path: str = "data/cache/tiles.db",
+    ):
+        """Initialize cache directory and tile registry.
 
         Args:
             cache_dir: Root directory for cached tiles. Created if missing.
+            db_path: Path to the SQLite registry database.
         """
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.registry = TileRegistry(db_path)
 
     def get_tile(
         self,
@@ -105,16 +116,27 @@ class TileCache:
         if "SCL" not in bands:
             bands = bands + ["SCL"]
 
-        # 1. Cache-first lookup — any valid tile for this ID is acceptable.
+        # 1. Registry-first lookup — fast SQLite query.
+        record = self.registry.get_tile(tile_id)
+        if record is not None:
+            path = Path(record["filepath"])
+            if _is_valid_geotiff(path):
+                return path
+            # File was moved/deleted — clean stale record
+            self.registry.delete_tile(record["tile_id"], record["date"])
+
+        # 2. Filesystem fallback — any valid tile for this ID is acceptable.
         #    Corrupted files are cleaned up as we scan.
         cached = sorted(self.cache_dir.glob(f"{tile_id}_*.tif"), reverse=True)
         for path in cached:
             if _is_valid_geotiff(path):
+                # Auto-register if found on disk but not in DB
+                self._auto_register(path)
                 return path
             # Corrupted — remove so it doesn't shadow valid tiles
             path.unlink(missing_ok=True)
 
-        # 2. Not in cache — authenticate, search, and download
+        # 3. Not in cache — authenticate, search, and download
         client_id, client_secret = _require_credentials()
         token = get_access_token(client_id, client_secret)
 
@@ -144,7 +166,51 @@ class TileCache:
             tmp_file.unlink(missing_ok=True)
             raise
 
+        # Auto-register the newly downloaded tile
+        self._auto_register(cache_path)
         return cache_path
+
+    def _auto_register(self, path: Path) -> None:
+        """Register a cached GeoTIFF in the SQLite registry.
+
+        Silently skips tiles that fail FG boundary checks (e.g. synthetic
+        test data or out-of-bounds scenes).
+        """
+        stem = path.stem
+        if "_" not in stem:
+            return
+        tile_id, date = stem.split("_", 1)
+
+        # Skip if already registered
+        if self.registry.get_tile(tile_id, date) is not None:
+            return
+
+        try:
+            with rasterio.open(path) as src:
+                bounds = src.bounds
+                crs = str(src.crs)
+                width = src.width
+                height = src.height
+                bands = src.count
+        except Exception:
+            return
+
+        try:
+            self.registry.register_tile(
+                tile_id=tile_id,
+                date=date,
+                filepath=str(path),
+                bounds=(bounds.left, bounds.bottom, bounds.right, bounds.top),
+                crs=crs,
+                width=width,
+                height=height,
+                bands=bands,
+                size_bytes=path.stat().st_size,
+                source="copernicus",
+            )
+        except ValueError:
+            # Tile bounds do not intersect French Guiana — skip registration
+            pass
 
     def list_cached_tiles(self) -> list[Path]:
         """List all tiles currently in cache.

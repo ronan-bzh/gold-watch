@@ -150,6 +150,8 @@ inference:
 
 cache:
   tiles_dir: "data/cache/tiles"
+  tiles_db: "data/cache/tiles.db"
+  tiles_schema: "data/schema.sql"
   predictions_dir: "data/cache/predictions"
   # Max cache size in GB before warnings
   max_size_gb: 10
@@ -169,6 +171,14 @@ baseline:
   # Spectral rule-based baseline thresholds (Feature 8)
   ndvi_threshold: 0.2
   bsi_threshold: 0.1
+
+web:
+  tile_server:
+    host: "0.0.0.0"
+    port: 8000
+    max_zoom: 14
+    # Natural color stretch: reflectance values above this are clipped to white
+    reflectance_clip: 3000
 
 export:
   # Output directory

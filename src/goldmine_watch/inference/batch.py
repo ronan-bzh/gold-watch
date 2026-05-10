@@ -14,6 +14,7 @@ import rasterio
 import torch
 
 from goldmine_watch.data.tile_cache import TileCache
+from goldmine_watch.data.tile_registry import TileRegistry
 from goldmine_watch.inference.predict_big import predict_big_image
 
 # Default French Guiana Sentinel-2 tile IDs
@@ -42,16 +43,22 @@ def _get_tile_cache_dir(cache_dir: str) -> Path:
     return path
 
 
-def _find_cached_tile_path(cache: TileCache, tile_id: str) -> Path | None:
+def _find_cached_tile_path(
+    registry: TileRegistry, tile_id: str
+) -> Path | None:
     """Return the newest valid cached GeoTIFF for *tile_id*, or None."""
-    cached = sorted(cache.cache_dir.glob(f"{tile_id}_*.tif"), reverse=True)
-    for path in cached:
-        try:
-            with rasterio.open(path) as src:
-                if src.count > 0 and src.width > 0 and src.height > 0:
-                    return path
-        except Exception:
-            continue
+    record = registry.get_tile(tile_id)
+    if record is None:
+        return None
+    path = Path(record["filepath"])
+    try:
+        with rasterio.open(path) as src:
+            if src.count > 0 and src.width > 0 and src.height > 0:
+                return path
+    except Exception:
+        pass
+    # Stale record — file missing or corrupted
+    registry.delete_tile(record["tile_id"], record["date"])
     return None
 
 
@@ -59,6 +66,7 @@ def inference_batch(
     model_path: str = "models/phase2_best.pth",
     tile_list: list[str] | None = None,
     cache_dir: str = "data/cache",
+    db_path: str = "data/cache/tiles.db",
     output_dir: str = "outputs/phase2",
     threshold: float = 0.2,
     tile_size: int = 256,
@@ -70,7 +78,7 @@ def inference_batch(
     Steps:
     1. Load trained model
     2. For each tile:
-       - Check cache (reuse if available)
+       - Check registry (reuse if available)
        - Run predict_big_image()
        - Save probability raster
     3. Return list of prediction paths
@@ -81,6 +89,7 @@ def inference_batch(
             five French Guiana tiles.
         cache_dir: Root cache directory.  The function automatically looks
             in a ``tiles/`` sub-directory if it exists.
+        db_path: Path to the SQLite tile registry database.
         output_dir: Directory where probability GeoTIFFs are written.
         threshold: Probability threshold (stored for downstream use but not
             applied during inference).
@@ -107,8 +116,7 @@ def inference_batch(
     if not tiles:
         raise ValueError("No tiles specified for inference.")
 
-    cache_root = _get_tile_cache_dir(cache_dir)
-    cache = TileCache(str(cache_root))
+    registry = TileRegistry(db_path)
 
     # Resolve device
     device_str = _auto_device() if device is None or device == "auto" else device
@@ -118,7 +126,7 @@ def inference_batch(
     first_tile_path: Path | None = None
     in_channels = 0
     for tile_id in tiles:
-        path = _find_cached_tile_path(cache, tile_id)
+        path = _find_cached_tile_path(registry, tile_id)
         if path is not None:
             first_tile_path = path
             with rasterio.open(path) as src:
@@ -128,7 +136,7 @@ def inference_batch(
     if first_tile_path is None:
         raise RuntimeError(
             f"No cached tiles found for tile IDs: {tiles}. "
-            f"Checked in: {cache.cache_dir}"
+            f"Checked in registry: {db_path}"
         )
 
     print("Batch Inference")
@@ -141,7 +149,7 @@ def inference_batch(
     total_start = time.time()
 
     for i, tile_id in enumerate(tiles, start=1):
-        tile_path = _find_cached_tile_path(cache, tile_id)
+        tile_path = _find_cached_tile_path(registry, tile_id)
         if tile_path is None:
             print(f"  [{i}/{len(tiles)}] {tile_id}: NOT FOUND in cache — skipping")
             continue
