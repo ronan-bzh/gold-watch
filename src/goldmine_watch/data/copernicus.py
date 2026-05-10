@@ -232,6 +232,19 @@ def download_scene(
 
     width_px, height_px = _bbox_size_pixels(bbox, resolution)
 
+    # Sentinel Hub Process API has a 2500px limit per dimension.
+    # If the request exceeds this, scale down resolution proportionally
+    # so that the largest dimension is exactly 2500px.
+    max_dim = max(width_px, height_px)
+    if max_dim > 2500:
+        scale_factor = 2500 / max_dim
+        width_px = int(width_px * scale_factor)
+        height_px = int(height_px * scale_factor)
+        # Recalculate the effective resolution for logging
+        effective_res = resolution / scale_factor
+        print(f"  [download_scene] Request exceeds 2500px limit ({max_dim}px). "
+              f"Scaling to {width_px}x{height_px} (effective res ~{effective_res:.1f}m)")
+
     evalscript = _build_evalscript(bands)
 
     payload = {
@@ -268,6 +281,14 @@ def download_scene(
 
     headers = {"Authorization": f"Bearer {token}"}
     response = requests.post(_PROCESS_URL, json=payload, headers=headers, timeout=300)
+    if response.status_code == 400:
+        # Log the actual error response for debugging
+        error_text = response.text[:2000] if response.text else "(empty body)"
+        raise RuntimeError(
+            f"Copernicus Process API returned 400. "
+            f"Request size: {width_px}x{height_px}px ({len(bands)} bands). "
+            f"Error: {error_text}"
+        )
     response.raise_for_status()
 
     with open(output_path, "wb") as dst:
